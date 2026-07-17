@@ -4,7 +4,7 @@ This is a minimal Kotlin/JVM project scaffold for the `finances` workspace.
 
 Quick start:
 ```cmd
-npm run dev
+npm run dev -- --host
 ```
 
 Quick start (PowerShell):
