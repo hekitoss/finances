@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchTransactions } from "../api";
+import { exportTransactionsExcel, fetchTransactions } from "../api";
 import type { Transaction } from "../types";
 import TransactionsTable from "../components/TransactionsTable";
 import CategoryPieChart from "../components/CategoryPieChart";
@@ -29,6 +29,7 @@ const YEARS = Array.from({ length: 11 }, (_, index) => DEFAULT_YEAR - 5 + index)
 export default function DashboardPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [exporting, setExporting] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [selectedMonth, setSelectedMonth] = useState<number>(DEFAULT_MONTH);
   const [selectedYear, setSelectedYear] = useState<number>(DEFAULT_YEAR);
@@ -53,6 +54,20 @@ export default function DashboardPage() {
 
   const handleTransactionDeleted = (id: number) => {
     setTransactions((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    setError("");
+
+    try {
+      await exportTransactionsExcel({ month: selectedMonth, year: selectedYear });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setError(message);
+    } finally {
+      setExporting(false);
+    }
   };
 
   const amountSummary = useMemo(() => {
@@ -124,6 +139,9 @@ export default function DashboardPage() {
             disabled={loading}
           >
             {loading ? "Loading..." : "Refresh"}
+          </button>
+          <button type="button" onClick={() => void handleExport()} className="button-export" disabled={exporting || loading}>
+            {exporting ? "Exporting..." : "Export Excel"}
           </button>
         </div>
       </header>

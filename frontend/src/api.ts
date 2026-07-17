@@ -47,6 +47,48 @@ export async function fetchTransactions(period?: { month: number; year: number }
   return data;
 }
 
+function readFileName(contentDisposition: string | null, fallback: string): string {
+  if (!contentDisposition) {
+    return fallback;
+  }
+
+  const match = contentDisposition.match(/filename="?([^";]+)"?/i);
+  return match?.[1] ?? fallback;
+}
+
+export async function exportTransactionsExcel(period: { month: number; year: number }): Promise<void> {
+  const query = new URLSearchParams({
+    month: String(period.month),
+    year: String(period.year)
+  }).toString();
+
+  const response = await fetch(`/api/transactions/export?${query}`, {
+    headers: {
+      Accept: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "Failed to export transactions"));
+  }
+
+  const blob = await response.blob();
+  const fallbackFileName = `transactions-${period.year}-${String(period.month).padStart(2, "0")}.xlsx`;
+  const fileName = readFileName(response.headers.get("content-disposition"), fallbackFileName);
+  const downloadUrl = URL.createObjectURL(blob);
+
+  try {
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = fileName;
+    document.body.append(link);
+    link.click();
+    link.remove();
+  } finally {
+    URL.revokeObjectURL(downloadUrl);
+  }
+}
+
 export async function fetchTransaction(id: number): Promise<TransactionFormData> {
   const response = await fetch(`/api/transactions/${id}`, {
     headers: {

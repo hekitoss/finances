@@ -35,6 +35,13 @@ gradle build
 gradle run
 ```
 
+If you run with `java -jar`, build a fat jar first:
+
+```powershell
+.\gradlew.bat shadowJar
+java -jar .\build\libs\finances-all.jar
+```
+
 4) Tests:
 
 ```powershell

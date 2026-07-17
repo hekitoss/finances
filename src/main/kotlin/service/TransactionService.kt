@@ -3,6 +3,8 @@ package service
 import api.TransactionCreateDto
 import dao.TransactionDao
 import model.Transaction
+import org.apache.poi.xssf.usermodel.XSSFWorkbook
+import java.io.ByteArrayOutputStream
 import java.math.BigDecimal
 import java.time.LocalDate
 
@@ -29,6 +31,39 @@ class TransactionService(
         val start = LocalDate.of(year, month, 1)
         val end = start.plusMonths(1)
         return dao.findByDateRange(startDateInclusive = start, endDateExclusive = end)
+    }
+
+    fun exportTransactionsByMonthYearToExcel(month: Int, year: Int): ByteArray {
+        val transactions = getTransactionsByMonthYear(month = month, year = year)
+
+        val workbook = XSSFWorkbook()
+        val sheet = workbook.createSheet("Transactions")
+
+        val headerRow = sheet.createRow(0)
+        val headers = listOf("Date", "Amount", "Currency", "Person", "Category", "Subcategory", "Comment")
+        headers.forEachIndexed { index, header ->
+            headerRow.createCell(index).setCellValue(header)
+        }
+
+        transactions.forEachIndexed { index, transaction ->
+            val row = sheet.createRow(index + 1)
+            row.createCell(0).setCellValue(transaction.transactionDate.toString())
+            row.createCell(1).setCellValue(transaction.amount.toPlainString())
+            row.createCell(2).setCellValue(transaction.currency)
+            row.createCell(3).setCellValue(transaction.person ?: "")
+            row.createCell(4).setCellValue(transaction.category)
+            row.createCell(5).setCellValue(transaction.subCategory ?: "")
+            row.createCell(6).setCellValue(transaction.comment ?: "")
+        }
+
+        repeat(headers.size) { sheet.autoSizeColumn(it) }
+
+        return workbook.use { wb ->
+            ByteArrayOutputStream().use { outputStream ->
+                wb.write(outputStream)
+                outputStream.toByteArray()
+            }
+        }
     }
 
     fun getTransaction(id: Int): Transaction? {

@@ -1,6 +1,9 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+
 plugins {
     kotlin("jvm") version "1.9.0"
     kotlin("plugin.serialization") version "1.9.0"
+    id("com.github.johnrengelman.shadow") version "8.1.1"
     application
 }
 
@@ -30,10 +33,15 @@ dependencies {
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
     implementation("io.ktor:ktor-server-cors:$ktorVersion")
     implementation("io.ktor:ktor-server-call-logging:$ktorVersion")
+    implementation("org.apache.poi:poi-ooxml:5.2.5")
     testImplementation(kotlin("test"))
 }
 
 tasks.test {
     useJUnitPlatform()
+}
+
+tasks.named<ShadowJar>("shadowJar") {
+    archiveClassifier.set("all")
 }
 

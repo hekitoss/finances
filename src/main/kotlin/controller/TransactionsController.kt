@@ -3,10 +3,14 @@ package controller
 import api.TransactionCreateDto
 import api.TransactionDto
 import api.TransactionFormDto
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
 import io.ktor.server.request.receive
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
@@ -62,6 +66,28 @@ class TransactionsController(private val service: TransactionService) {
 
                 val dto = rows.map(::toDto)
                 call.respond(dto)
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to (e.message ?: "Invalid month/year")))
+            }
+        }
+
+        route.get("/api/transactions/export") {
+            val month = call.request.queryParameters["month"]?.toIntOrNull()
+            val year = call.request.queryParameters["year"]?.toIntOrNull()
+
+            if (month == null || year == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Month and year are required and must be numbers"))
+                return@get
+            }
+
+            try {
+                val bytes = service.exportTransactionsByMonthYearToExcel(month = month, year = year)
+                val fileName = "transactions-%04d-%02d.xlsx".format(year, month)
+                call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"$fileName\"")
+                call.respondBytes(
+                    bytes = bytes,
+                    contentType = ContentType.parse("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                )
             } catch (e: IllegalArgumentException) {
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to (e.message ?: "Invalid month/year")))
             }

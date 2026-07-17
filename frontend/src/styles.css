@@ -98,7 +98,18 @@ body {
   cursor: pointer;
 }
 
-.button-refresh:disabled {
+.button-export {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: #4f46e5;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button-refresh:disabled,
+.button-export:disabled {
   opacity: 0.7;
   cursor: not-allowed;
 }
