@@ -91,6 +91,10 @@ export default function DashboardPage() {
     );
   }, [transactions]);
 
+  const eurTransactionsForChart = useMemo(() => {
+    return transactions.filter((transaction) => transaction.currency.trim().toUpperCase() === "EUR");
+  }, [transactions]);
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -169,7 +173,7 @@ export default function DashboardPage() {
 
       <section className="grid-two-columns">
         <TransactionsTable transactions={transactions} onTransactionDeleted={handleTransactionDeleted} />
-        <CategoryPieChart transactions={transactions} />
+        <CategoryPieChart transactions={eurTransactionsForChart} />
       </section>
     </main>
   );
