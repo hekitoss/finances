@@ -14,6 +14,8 @@ data class Transaction(
     val category: String,
     val subcategoryId: Int?,
     val subCategory: String?,
-    val comment: String?
+    val comment: String?,
+    /** Number of line items (receipt positions) attached to this transaction. */
+    val itemsCount: Int = 0
 )
 

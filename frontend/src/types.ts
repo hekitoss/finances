@@ -7,6 +7,16 @@ export interface Transaction {
   category: string;
   subCategory: string | null;
   comment: string | null;
+  itemsCount: number;
+}
+
+export interface TransactionItem {
+  id: number;
+  position: number;
+  name: string;
+  amount: string;
+  category: string | null;
+  subCategory: string | null;
 }
 
 export interface TransactionFormData {

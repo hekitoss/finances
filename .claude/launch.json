@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "finances-test-8081",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "set PORT=8081&& set TELEGRAM_BOT_TOKEN=&& java -jar build\\libs\\finances-all.jar"],
+      "port": 8081
+    }
+  ]
+}

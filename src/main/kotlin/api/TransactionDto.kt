@@ -11,7 +11,18 @@ data class TransactionDto(
     val person: String? = null,
     val category: String,
     val subCategory: String? = null,
-    val comment: String? = null
+    val comment: String? = null,
+    val itemsCount: Int = 0
+)
+
+@Serializable
+data class TransactionItemDto(
+    val id: Int,
+    val position: Int,
+    val name: String,
+    val amount: String,
+    val category: String? = null,
+    val subCategory: String? = null
 )
 
 @Serializable

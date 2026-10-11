@@ -9,3 +9,13 @@ data class TransactionItem(
     val categoryId: Int?,
     val subcategoryId: Int?
 )
+
+/** A stored line item with resolved category names, for display. */
+data class TransactionItemDetails(
+    val id: Int,
+    val position: Int,
+    val name: String,
+    val amount: BigDecimal,
+    val category: String?,
+    val subCategory: String?
+)

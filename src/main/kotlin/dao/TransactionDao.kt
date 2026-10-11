@@ -2,6 +2,7 @@ package dao
 
 import model.Transaction
 import model.TransactionItem
+import model.TransactionItemDetails
 import java.math.BigDecimal
 import java.sql.Connection
 import java.sql.ResultSet
@@ -22,7 +23,8 @@ class TransactionDao(private val ds: DataSource) {
             c.name AS category,
             t.subcategory_id,
             s.name AS sub_category,
-            t.comment
+            t.comment,
+            (SELECT count(*) FROM transaction_items ti WHERE ti.transaction_id = t.id) AS items_count
         FROM transactions t
         LEFT JOIN persons p ON p.id = t.person_id
         JOIN categories c ON c.id = t.category_id
@@ -125,12 +127,43 @@ class TransactionDao(private val ds: DataSource) {
                     stmt.executeBatch()
                 }
                 conn.commit()
-                return transaction
+                return transaction.copy(itemsCount = items.size)
             } catch (e: Exception) {
                 conn.rollback()
                 throw e
             } finally {
                 conn.autoCommit = autoCommit
+            }
+        }
+    }
+
+    fun findItems(transactionId: Int): List<TransactionItemDetails> {
+        val sql = """
+            SELECT ti.id, ti.position, ti.name, ti.amount, c.name AS category, s.name AS sub_category
+            FROM transaction_items ti
+            LEFT JOIN categories c ON c.id = ti.category_id
+            LEFT JOIN subcategories s ON s.id = ti.subcategory_id
+            WHERE ti.transaction_id = ?
+            ORDER BY ti.position, ti.id
+        """.trimIndent()
+
+        ds.connection.use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setInt(1, transactionId)
+                stmt.executeQuery().use { rs ->
+                    val list = mutableListOf<TransactionItemDetails>()
+                    while (rs.next()) {
+                        list += TransactionItemDetails(
+                            id = rs.getInt("id"),
+                            position = rs.getInt("position"),
+                            name = rs.getString("name"),
+                            amount = rs.getBigDecimal("amount"),
+                            category = rs.getString("category"),
+                            subCategory = rs.getString("sub_category")
+                        )
+                    }
+                    return list
+                }
             }
         }
     }
@@ -162,7 +195,8 @@ class TransactionDao(private val ds: DataSource) {
                 c.name AS category,
                 i.subcategory_id,
                 s.name AS sub_category,
-                i.comment
+                i.comment,
+                0 AS items_count
             FROM inserted i
             LEFT JOIN persons p ON p.id = i.person_id
             JOIN categories c ON c.id = i.category_id
@@ -233,7 +267,8 @@ class TransactionDao(private val ds: DataSource) {
                 c.name AS category,
                 u.subcategory_id,
                 s.name AS sub_category,
-                u.comment
+                u.comment,
+                (SELECT count(*) FROM transaction_items ti WHERE ti.transaction_id = u.id) AS items_count
             FROM updated u
             LEFT JOIN persons p ON p.id = u.person_id
             JOIN categories c ON c.id = u.category_id
@@ -282,7 +317,8 @@ class TransactionDao(private val ds: DataSource) {
             category = category,
             subcategoryId = subcategoryId,
             subCategory = subCategory,
-            comment = comment
+            comment = comment,
+            itemsCount = rs.getInt("items_count")
         )
     }
 }

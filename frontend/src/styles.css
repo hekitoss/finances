@@ -248,6 +248,59 @@ th {
   text-align: center;
 }
 
+.items-toggle {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.items-toggle:hover {
+  background: #e0e7ff;
+}
+
+.row-expanded td {
+  border-bottom-color: transparent;
+}
+
+.receipt-row > td {
+  padding: 0 8px 12px 32px;
+  background: #f9fafb;
+}
+
+.receipt-items {
+  width: 100%;
+}
+
+.receipt-items td {
+  padding: 6px 8px;
+  font-size: 13px;
+  border-bottom: 1px dashed #e5e7eb;
+}
+
+.receipt-items tr:last-child td {
+  border-bottom: none;
+}
+
+.receipt-category {
+  color: #6b7280;
+}
+
+.receipt-status {
+  margin: 8px 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.receipt-error {
+  color: #b91c1c;
+}
+
 .chart-card {
   min-height: 420px;
 }

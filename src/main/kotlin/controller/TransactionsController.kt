@@ -3,6 +3,7 @@ package controller
 import api.TransactionCreateDto
 import api.TransactionDto
 import api.TransactionFormDto
+import api.TransactionItemDto
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -27,7 +28,8 @@ class TransactionsController(private val service: TransactionService) {
         person = transaction.person,
         category = transaction.category,
         subCategory = transaction.subCategory,
-        comment = transaction.comment
+        comment = transaction.comment,
+        itemsCount = transaction.itemsCount
     )
 
     private fun toFormDto(transaction: model.Transaction): TransactionFormDto = TransactionFormDto(
@@ -107,6 +109,26 @@ class TransactionsController(private val service: TransactionService) {
             }
 
             call.respond(toFormDto(transaction))
+        }
+
+        route.get("/api/transactions/{id}/items") {
+            val id = call.parameters["id"]?.toIntOrNull()
+            if (id == null || id <= 0) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid transaction id"))
+                return@get
+            }
+
+            val items = service.getTransactionItems(id).map { item ->
+                TransactionItemDto(
+                    id = item.id,
+                    position = item.position,
+                    name = item.name,
+                    amount = item.amount.toPlainString(),
+                    category = item.category,
+                    subCategory = item.subCategory
+                )
+            }
+            call.respond(items)
         }
 
         route.post("/api/transactions") {

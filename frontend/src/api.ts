@@ -6,7 +6,8 @@ import type {
   SubcategoryDictionaryItem,
   Transaction,
   TransactionCreateRequest,
-  TransactionFormData
+  TransactionFormData,
+  TransactionItem
 } from "./types";
 
 async function readErrorMessage(response: Response, fallback: string): Promise<string> {
@@ -101,6 +102,21 @@ export async function fetchTransaction(id: number): Promise<TransactionFormData>
   }
 
   const data = (await response.json()) as TransactionFormData;
+  return data;
+}
+
+export async function fetchTransactionItems(id: number): Promise<TransactionItem[]> {
+  const response = await fetch(`/api/transactions/${id}/items`, {
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "Failed to load receipt items"));
+  }
+
+  const data = (await response.json()) as TransactionItem[];
   return data;
 }
 

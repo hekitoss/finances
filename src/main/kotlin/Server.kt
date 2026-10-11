@@ -26,7 +26,7 @@ import service.TransactionService
 import java.io.File
 
 fun main() {
-    embeddedServer(Netty, port = 8080) {
+    embeddedServer(Netty, port = System.getenv("PORT")?.toIntOrNull() ?: 8080) {
         module()
     }.start(wait = true)
 }

@@ -4,6 +4,7 @@ import api.TransactionCreateDto
 import dao.TransactionDao
 import model.Transaction
 import model.TransactionItem
+import model.TransactionItemDetails
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.ByteArrayOutputStream
 import java.math.BigDecimal
@@ -84,6 +85,11 @@ class TransactionService(
             subcategoryId = input.subcategoryId,
             comment = input.comment
         )
+    }
+
+    fun getTransactionItems(transactionId: Int): List<TransactionItemDetails> {
+        require(transactionId > 0) { "Transaction id must be positive" }
+        return dao.findItems(transactionId)
     }
 
     /** Creates a transaction (e.g. a receipt total) with its line items, atomically. */
