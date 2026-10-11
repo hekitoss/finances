@@ -133,20 +133,22 @@ export default function DashboardPage() {
               </select>
             </label>
           </div>
-          <Link to="/add" className="button-link">
-            Add transaction
-          </Link>
-          <button
-            type="button"
-            onClick={() => void loadTransactions()}
-            className="button-refresh"
-            disabled={loading}
-          >
-            {loading ? "Loading..." : "Refresh"}
-          </button>
-          <button type="button" onClick={() => void handleExport()} className="button-export" disabled={exporting || loading}>
-            {exporting ? "Exporting..." : "Export Excel"}
-          </button>
+          <div className="header-buttons">
+            <Link to="/add" className="button-link">
+              Add transaction
+            </Link>
+            <button
+              type="button"
+              onClick={() => void loadTransactions()}
+              className="button-refresh"
+              disabled={loading}
+            >
+              {loading ? "Loading..." : "Refresh"}
+            </button>
+            <button type="button" onClick={() => void handleExport()} className="button-export" disabled={exporting || loading}>
+              {exporting ? "Exporting..." : "Export Excel"}
+            </button>
+          </div>
         </div>
       </header>
 

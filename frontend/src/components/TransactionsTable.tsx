@@ -34,6 +34,31 @@ async function handleDelete(id: number, onDeleted: (id: number) => void) {
   }
 }
 
+function amountClass(amount: string): string {
+  return Number.parseFloat(amount) < 0 ? "amount-negative" : "amount-positive";
+}
+
+function RowActions({ id, onDeleted }: { id: number; onDeleted: (id: number) => void }) {
+  return (
+    <div className="table-actions">
+      <Link to={`/transactions/${id}/edit`} className="edit-btn">
+        Edit
+      </Link>
+      <button onClick={() => handleDelete(id, onDeleted)} className="delete-btn">
+        Delete
+      </button>
+    </div>
+  );
+}
+
+function ItemsToggle({ count, expanded, onToggle }: { count: number; expanded: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" className="items-toggle" aria-expanded={expanded} onClick={onToggle}>
+      {expanded ? "▾" : "▸"} {count} items
+    </button>
+  );
+}
+
 function ReceiptItems({ state, currency }: { state: ItemsState | undefined; currency: string }) {
   if (!state || state.status === "loading") {
     return <p className="receipt-status">Loading items…</p>;
@@ -131,28 +156,15 @@ export default function TransactionsTable({ transactions, onTransactionDeleted }
                       <td>
                         {transaction.comment ?? "-"}
                         {transaction.itemsCount > 0 && (
-                          <button
-                            type="button"
-                            className="items-toggle"
-                            aria-expanded={isExpanded}
-                            onClick={() => toggleItems(transaction.id)}
-                          >
-                            {isExpanded ? "▾" : "▸"} {transaction.itemsCount} items
-                          </button>
+                          <ItemsToggle
+                            count={transaction.itemsCount}
+                            expanded={isExpanded}
+                            onToggle={() => toggleItems(transaction.id)}
+                          />
                         )}
                       </td>
                       <td>
-                        <div className="table-actions">
-                          <Link to={`/transactions/${transaction.id}/edit`} className="edit-btn">
-                            Edit
-                          </Link>
-                          <button
-                            onClick={() => handleDelete(transaction.id, onTransactionDeleted)}
-                            className="delete-btn"
-                          >
-                            Delete
-                          </button>
-                        </div>
+                        <RowActions id={transaction.id} onDeleted={onTransactionDeleted} />
                       </td>
                     </tr>
                     {isExpanded && (
@@ -169,6 +181,51 @@ export default function TransactionsTable({ transactions, onTransactionDeleted }
           </tbody>
         </table>
       </div>
+
+      {/* Narrow screens: the same rows as stacked cards instead of a wide table. */}
+      <ul className="transaction-cards">
+        {transactions.length === 0 ? (
+          <li className="empty">No transactions found.</li>
+        ) : (
+          transactions.map((transaction) => {
+            const isExpanded = expandedIds.has(transaction.id);
+            return (
+              <li key={transaction.id} className="transaction-card">
+                <div className="transaction-card-top">
+                  <div className="transaction-card-category">
+                    {transaction.category}
+                    {transaction.subCategory && <span> · {transaction.subCategory}</span>}
+                  </div>
+                  <div className={`transaction-card-amount ${amountClass(transaction.amount)}`}>
+                    {formatAmount(transaction.amount, transaction.currency)}
+                  </div>
+                </div>
+                <div className="transaction-card-meta">
+                  {[transaction.transactionDate, transaction.person].filter(Boolean).join(" · ")}
+                </div>
+                {(transaction.comment || transaction.itemsCount > 0) && (
+                  <div className="transaction-card-comment">
+                    {transaction.comment}
+                    {transaction.itemsCount > 0 && (
+                      <ItemsToggle
+                        count={transaction.itemsCount}
+                        expanded={isExpanded}
+                        onToggle={() => toggleItems(transaction.id)}
+                      />
+                    )}
+                  </div>
+                )}
+                {isExpanded && (
+                  <div className="transaction-card-items">
+                    <ReceiptItems state={itemsById[transaction.id]} currency={transaction.currency} />
+                  </div>
+                )}
+                <RowActions id={transaction.id} onDeleted={onTransactionDeleted} />
+              </li>
+            );
+          })
+        )}
+      </ul>
     </section>
   );
 }
