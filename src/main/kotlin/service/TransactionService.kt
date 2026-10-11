@@ -3,6 +3,7 @@ package service
 import api.TransactionCreateDto
 import dao.TransactionDao
 import model.Transaction
+import model.TransactionItem
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.ByteArrayOutputStream
 import java.math.BigDecimal
@@ -82,6 +83,35 @@ class TransactionService(
             categoryId = input.categoryId,
             subcategoryId = input.subcategoryId,
             comment = input.comment
+        )
+    }
+
+    /** Creates a transaction (e.g. a receipt total) with its line items, atomically. */
+    fun createTransactionWithItems(create: TransactionCreateDto, items: List<TransactionItem>): Transaction {
+        val input = normalizeInput(create)
+        require(items.isNotEmpty()) { "Items must not be empty" }
+
+        val normalizedItems = items.map { item ->
+            val name = item.name.trim()
+            require(name.isNotEmpty()) { "Item name must not be blank" }
+            if (item.categoryId != null) {
+                require(dictionaryService.categoryExists(item.categoryId)) { "Unknown category id: ${item.categoryId}" }
+            }
+            val subcategoryId = item.subcategoryId?.takeIf { id ->
+                item.categoryId != null && dictionaryService.subcategoryExists(item.categoryId, id)
+            }
+            item.copy(name = name.take(500), subcategoryId = subcategoryId)
+        }
+
+        return dao.insertWithItems(
+            transactionDate = input.transactionDate,
+            amount = input.amount,
+            currency = input.currency,
+            personId = input.personId,
+            categoryId = input.categoryId,
+            subcategoryId = input.subcategoryId,
+            comment = input.comment,
+            items = normalizedItems
         )
     }
 

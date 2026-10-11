@@ -59,6 +59,17 @@ CREATE INDEX idx_transactions_person_id ON transactions (person_id);
 CREATE INDEX idx_transactions_subcategory_id ON transactions (subcategory_id);
 CREATE INDEX idx_subcategories_category_id ON subcategories (category_id);
 
+CREATE TABLE transaction_items (
+    id             SERIAL PRIMARY KEY,
+    transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    position       INTEGER NOT NULL,
+    name           VARCHAR(500) NOT NULL,
+    amount         NUMERIC(12, 2) NOT NULL,
+    category_id    INTEGER REFERENCES categories(id),
+    subcategory_id INTEGER REFERENCES subcategories(id)
+);
+CREATE INDEX idx_transaction_items_transaction_id ON transaction_items (transaction_id);
+
 INSERT INTO transactions (transaction_date, amount, currency, person_id, category_id, subcategory_id, comment) VALUES
 (
     '2026-07-01',

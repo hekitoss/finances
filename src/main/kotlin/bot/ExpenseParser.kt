@@ -32,6 +32,8 @@ data class ParsedReceipt(
     val date: String,
     val currency: String,
     val total: Double,
+    val categoryId: Int,
+    val subcategoryId: Int? = null,
     val items: List<ReceiptItem>
 )
 
@@ -112,7 +114,9 @@ object ExpensePrompt {
             Today is $today. Use the purchase date printed on the receipt as YYYY-MM-DD; if there is none, use today
             (or the date from the caption).
 
-            For every item pick the best matching category and, if one fits, a subcategory that belongs to that category.
+            Pick a category (and, if one fits, a subcategory) for the receipt as a whole — the type of purchase that best
+            describes it overall, e.g. a supermarket receipt with mostly food is Food / Groceries even if it has a few
+            other things. Also pick the best matching category and subcategory for every item.
             Use only ids from this list:
             ${dictionary(categories, subcategories)}
 
@@ -153,6 +157,8 @@ object ExpensePrompt {
             "date" to mapOf("type" to "string", "description" to "YYYY-MM-DD"),
             "currency" to mapOf("type" to "string"),
             "total" to mapOf("type" to "number"),
+            "categoryId" to mapOf("type" to "integer"),
+            "subcategoryId" to nullableInteger,
             "items" to mapOf(
                 "type" to "array",
                 "items" to objectSchema(

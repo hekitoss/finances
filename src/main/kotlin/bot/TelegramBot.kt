@@ -18,6 +18,7 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.contentOrNull
 import model.Subcategory
 import model.Transaction
+import model.TransactionItem
 import service.DictionaryService
 import service.TransactionService
 import java.io.File
@@ -29,8 +30,6 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 import java.util.Properties
-import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Minimal Telegram bot (long polling) that adds transactions from messages like "12.50 кофе".
@@ -52,9 +51,6 @@ class TelegramBot(
     private val json = Json { ignoreUnknownKeys = true }
     private val baseUrl = "https://api.telegram.org/bot$token"
     private val supportedReceiptTypes = setOf("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf")
-
-    /** Transaction ids per receipt for the "undo receipt" button; kept in memory only. */
-    private val receiptTransactions = ConcurrentHashMap<String, List<Int>>()
 
     fun start() {
         val thread = Thread(::pollLoop, "telegram-bot")
@@ -208,54 +204,57 @@ class TelegramBot(
             return
         }
 
-        val unknownCategory = items.firstOrNull { item -> categories.none { it.id == item.categoryId } }
-        if (unknownCategory != null) {
-            sendMessage(chatId, "⚠️ ИИ выбрала несуществующую категорию для «${unknownCategory.description}», попробуй ещё раз.")
+        if (categories.none { it.id == receipt.categoryId }) {
+            sendMessage(chatId, "⚠️ ИИ выбрала несуществующую категорию для чека, попробуй ещё раз.")
             return
         }
 
-        val personId = findPersonId(personName)
-        val created = mutableListOf<Transaction>()
-        try {
-            for (item in items) {
-                created += transactionService.createTransaction(
-                    TransactionCreateDto(
-                        transactionDate = receipt.date,
-                        amount = toCents(item.amount).negate().toPlainString(),
-                        currency = receipt.currency,
-                        personId = personId,
-                        categoryId = item.categoryId,
-                        subcategoryId = validSubcategoryId(item.categoryId, item.subcategoryId, subcategories),
-                        comment = "${receipt.store}: ${item.description}".take(1000)
-                    )
-                )
-            }
+        // Item categories are informational; drop ones that don't exist instead of failing the whole receipt.
+        val transactionItems = items.map { item ->
+            val categoryId = item.categoryId.takeIf { id -> categories.any { it.id == id } }
+            TransactionItem(
+                name = item.description,
+                amount = toCents(item.amount).negate(),
+                categoryId = categoryId,
+                subcategoryId = categoryId?.let { validSubcategoryId(it, item.subcategoryId, subcategories) }
+            )
+        }
+
+        val itemsSum = transactionItems.sumOf { it.amount.negate() }
+        // The receipt row stores what was actually paid; fall back to the items sum if the total wasn't read.
+        val total = toCents(receipt.total).takeIf { it.signum() > 0 } ?: itemsSum
+
+        val created = try {
+            transactionService.createTransactionWithItems(
+                TransactionCreateDto(
+                    transactionDate = receipt.date,
+                    amount = total.negate().toPlainString(),
+                    currency = receipt.currency,
+                    personId = findPersonId(personName),
+                    categoryId = receipt.categoryId,
+                    subcategoryId = validSubcategoryId(receipt.categoryId, receipt.subcategoryId, subcategories),
+                    comment = receipt.store.take(1000)
+                ),
+                transactionItems
+            )
         } catch (e: Exception) {
-            // Keep a receipt all-or-nothing: roll back the rows inserted so far.
-            created.forEach { transactionService.deleteTransaction(it.id) }
             sendMessage(chatId, "⚠️ Не удалось сохранить чек: ${e.message}")
             return
         }
 
-        val key = UUID.randomUUID().toString().take(8)
-        receiptTransactions[key] = created.map { it.id }
-
-        val sum = created.sumOf { it.amount.negate() }
-        val total = toCents(receipt.total)
         val text = buildString {
-            append("🧾 ${receipt.store} · ${receipt.date} · $personName\n")
-            append("Добавлено позиций: ${created.size}\n\n")
-            created.forEach { t ->
-                val category = listOfNotNull(t.category, t.subCategory).joinToString(" / ")
-                append("• ${t.comment?.removePrefix("${receipt.store}: ")} — ${t.amount.negate().toPlainString()} · $category\n")
+            append("🧾 Чек добавлен\n")
+            append(formatTransaction(created))
+            append("\n\nПозиции (${transactionItems.size}):\n")
+            transactionItems.forEach { item ->
+                append("• ${item.name} — ${item.amount.negate().toPlainString()}\n")
             }
-            append("\nИтого: ${sum.toPlainString()} ${receipt.currency}")
-            if (sum.compareTo(total) != 0) {
-                append("\n⚠️ Сумма по чеку ${total.toPlainString()} ${receipt.currency} — проверь позиции")
+            if (itemsSum.compareTo(total) != 0) {
+                append("\n⚠️ Сумма позиций ${itemsSum.toPlainString()} не совпадает с итогом чека ${total.toPlainString()} — проверь")
             }
         }
 
-        sendMessage(chatId, text.take(4000), replyMarkup = undoButton("↩️ Отменить весь чек", "delr:$key"))
+        sendMessage(chatId, text.take(4000), replyMarkup = undoButton("↩️ Отменить чек", "del:${created.id}"))
     }
 
     private fun downloadFile(fileId: String): ByteArray {
@@ -303,28 +302,19 @@ class TelegramBot(
             return
         }
 
-        val answer = when {
-            data.startsWith("del:") -> {
-                val id = data.removePrefix("del:").toIntOrNull()
-                if (id != null && transactionService.deleteTransaction(id)) "Удалено" else "Уже удалено"
-            }
-            data.startsWith("delr:") -> {
-                val ids = receiptTransactions.remove(data.removePrefix("delr:"))
-                if (ids == null) {
-                    "Чек не найден (бот перезапускался?) — удали позиции на сайте"
-                } else {
-                    ids.forEach { transactionService.deleteTransaction(it) }
-                    "Удалено позиций: ${ids.size}"
-                }
-            }
-            else -> return
+        if (data.startsWith("del:")) {
+            // Receipt items are removed together with the transaction (ON DELETE CASCADE).
+            val id = data.removePrefix("del:").toIntOrNull()
+            val deleted = id != null && transactionService.deleteTransaction(id)
+            call("answerCallbackQuery", buildJsonObject {
+                put("callback_query_id", callbackId)
+                put("text", if (deleted) "Удалено" else "Уже удалено")
+            })
+        } else {
+            return
         }
 
-        call("answerCallbackQuery", buildJsonObject {
-            put("callback_query_id", callbackId)
-            put("text", answer)
-        })
-        if (message != null && !answer.startsWith("Чек не найден")) {
+        if (message != null) {
             val oldText = message["text"]?.jsonPrimitive?.content ?: ""
             call("editMessageText", buildJsonObject {
                 put("chat_id", message["chat"]!!.jsonObject["id"]!!.jsonPrimitive.long)
@@ -353,7 +343,7 @@ class TelegramBot(
         • вчера 30 аптека
         • зарплата 4200
 
-        Можно прислать фото или PDF чека — я разобью его на позиции и добавлю каждую отдельно.
+        Можно прислать фото или PDF чека — я добавлю его одной тратой и сохраню все позиции.
         В подписи к фото можно уточнить, например «вчера».
 
         /categories — список категорий
