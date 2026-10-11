@@ -60,16 +60,20 @@ The server starts a Telegram bot when `TELEGRAM_BOT_TOKEN` is set. Send it an am
 (`12.50 кофе`, `вчера 30 аптека`, `зарплата 4200`) — Claude picks the category/subcategory and the bot
 inserts a transaction. Each reply has an "↩️ Отменить" button that deletes the row.
 
+Allowed users live in `bot.properties`, one `telegramId=PersonName` per line (the name must match the
+`persons` table). Unknown users get their id in the bot's reply. Restart the server after editing the file.
+
 Environment variables:
 
 | Variable | Description |
 |---|---|
 | `TELEGRAM_BOT_TOKEN` | Token from @BotFather |
-| `TELEGRAM_USERS` | Allowed users, `telegramId:PersonName,...` (e.g. `123456:Nikita,789012:Natasha`). Unknown users get their id in the reply. |
 | `ANTHROPIC_API_KEY` | Claude API key |
 | `CLAUDE_MODEL` | Optional, defaults to `claude-opus-5-5` |
+| `TELEGRAM_USERS_FILE` | Optional path to the users file, defaults to `bot.properties` |
+| `TELEGRAM_USERS` | Optional extra users, `telegramId:PersonName,...`; overrides `bot.properties` |
 
 ```powershell
-$env:TELEGRAM_BOT_TOKEN="..."; $env:TELEGRAM_USERS="123456:Nikita"; $env:ANTHROPIC_API_KEY="..."
+$env:TELEGRAM_BOT_TOKEN="..."; $env:ANTHROPIC_API_KEY="..."
 .\gradlew.bat run
 ```

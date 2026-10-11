@@ -18,6 +18,7 @@ import kotlinx.serialization.json.putJsonArray
 import model.Transaction
 import service.DictionaryService
 import service.TransactionService
+import java.io.File
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.net.URI
@@ -25,13 +26,15 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
+import java.util.Properties
 
 /**
  * Minimal Telegram bot (long polling) that adds transactions from messages like "12.50 кофе".
  *
  * Env:
  *  - TELEGRAM_BOT_TOKEN: token from @BotFather
- *  - TELEGRAM_USERS: allowed users as "telegramUserId:PersonName,..." (e.g. "123456:Nikita,789012:Natasha")
+ *  - allowed users: bot.properties ("telegramUserId=PersonName" per line) and/or
+ *    TELEGRAM_USERS as "telegramUserId:PersonName,..." (see [loadAllowedUsers])
  *  - ANTHROPIC_API_KEY: Claude API key
  */
 class TelegramBot(
@@ -97,7 +100,7 @@ class TelegramBot(
 
         val personName = allowedUsers[userId]
         if (personName == null) {
-            sendMessage(chatId, "Нет доступа. Ваш Telegram id: $userId — добавьте его в TELEGRAM_USERS.")
+            sendMessage(chatId, "Нет доступа. Ваш Telegram id: $userId — добавьте его в bot.properties.")
             return
         }
 
@@ -250,6 +253,34 @@ class TelegramBot(
     }
 
     companion object {
+        /**
+         * Loads allowed users from a properties file ("telegramId=PersonName" per line,
+         * path from TELEGRAM_USERS_FILE, default "bot.properties") and the TELEGRAM_USERS env var.
+         * Env entries override file entries with the same id.
+         */
+        fun loadAllowedUsers(): Map<Long, String> {
+            val file = File(System.getenv("TELEGRAM_USERS_FILE") ?: "bot.properties")
+            val fromFile = if (file.isFile) parseAllowedUsersFile(file) else emptyMap()
+            return fromFile + parseAllowedUsers(System.getenv("TELEGRAM_USERS"))
+        }
+
+        fun parseAllowedUsersFile(file: File): Map<Long, String> {
+            val props = Properties()
+            file.reader(Charsets.UTF_8).use { props.load(it) }
+            return props.stringPropertyNames()
+                .mapNotNull { key ->
+                    val id = key.trim().toLongOrNull()
+                    val name = props.getProperty(key).trim()
+                    if (id == null || name.isEmpty()) {
+                        System.err.println("Ignoring invalid entry in ${file.path}: '$key'")
+                        null
+                    } else {
+                        id to name
+                    }
+                }
+                .toMap()
+        }
+
         /** Parses "123:Nikita,456:Natasha" into a map of Telegram user id to person name. */
         fun parseAllowedUsers(raw: String?): Map<Long, String> =
             raw.orEmpty().split(',')

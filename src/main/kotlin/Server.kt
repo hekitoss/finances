@@ -61,7 +61,7 @@ fun Application.module() {
     if (!telegramToken.isNullOrBlank()) {
         TelegramBot(
             token = telegramToken,
-            allowedUsers = TelegramBot.parseAllowedUsers(System.getenv("TELEGRAM_USERS")),
+            allowedUsers = TelegramBot.loadAllowedUsers(),
             parser = ExpenseParser(),
             transactionService = transactionService,
             dictionaryService = dictionaryService
