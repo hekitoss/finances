@@ -1,3 +1,5 @@
+import bot.ExpenseParser
+import bot.TelegramBot
 import controller.DictionariesController
 import controller.TransactionsController
 import dao.DictionaryDao
@@ -55,6 +57,17 @@ fun Application.module() {
     val transactionService = TransactionService(transactionDao, dictionaryService)
     val transactionsController = TransactionsController(transactionService)
     val dictionariesController = DictionariesController(dictionaryService)
+    val telegramToken = System.getenv("TELEGRAM_BOT_TOKEN")
+    if (!telegramToken.isNullOrBlank()) {
+        TelegramBot(
+            token = telegramToken,
+            allowedUsers = TelegramBot.parseAllowedUsers(System.getenv("TELEGRAM_USERS")),
+            parser = ExpenseParser(),
+            transactionService = transactionService,
+            dictionaryService = dictionaryService
+        ).start()
+    }
+
     val frontendDir = File("frontend/dist")
     val frontendIndex = File(frontendDir, "index.html")
 

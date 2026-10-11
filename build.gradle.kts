@@ -34,6 +34,7 @@ dependencies {
     implementation("io.ktor:ktor-server-cors:$ktorVersion")
     implementation("io.ktor:ktor-server-call-logging:$ktorVersion")
     implementation("org.apache.poi:poi-ooxml:5.2.5")
+    implementation("com.anthropic:anthropic-java:2.34.0")
     testImplementation(kotlin("test"))
 }
 
