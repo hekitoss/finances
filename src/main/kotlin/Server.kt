@@ -62,7 +62,7 @@ fun Application.module() {
         TelegramBot(
             token = telegramToken,
             allowedUsers = TelegramBot.loadAllowedUsers(),
-            parser = ExpenseParser(),
+            parser = ExpenseParser.fromEnv(),
             transactionService = transactionService,
             dictionaryService = dictionaryService
         ).start()

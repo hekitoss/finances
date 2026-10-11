@@ -1,14 +1,6 @@
 package bot
 
-import com.anthropic.client.AnthropicClient
-import com.anthropic.client.okhttp.AnthropicOkHttpClient
-import com.anthropic.core.JsonValue
-import com.anthropic.models.messages.JsonOutputFormat
-import com.anthropic.models.messages.MessageCreateParams
-import com.anthropic.models.messages.OutputConfig
-import com.anthropic.models.messages.StopReason
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import model.Category
 import model.Subcategory
 import java.time.LocalDate
@@ -25,57 +17,33 @@ data class ParsedExpense(
     val comment: String
 )
 
-/**
- * Turns a free-form message like "12.50 кофе" into a structured transaction
- * using Claude with a JSON schema constrained output.
- */
-class ExpenseParser(
-    private val model: String = System.getenv("CLAUDE_MODEL") ?: "claude-opus-5-5",
-    private val client: AnthropicClient = AnthropicOkHttpClient.fromEnv()
-) {
-    private val json = Json { ignoreUnknownKeys = true }
-
+/** Turns a free-form message like "12.50 кофе" into a structured transaction using an LLM. */
+interface ExpenseParser {
     fun parse(
         text: String,
         categories: List<Category>,
         subcategories: List<Subcategory>,
         today: LocalDate = LocalDate.now()
-    ): ParsedExpense {
-        val params = MessageCreateParams.builder()
-            .model(model)
-            .maxTokens(4000L)
-            .system(buildSystemPrompt(categories, subcategories, today))
-            .outputConfig(
-                OutputConfig.builder()
-                    .effort(OutputConfig.Effort.LOW)
-                    .format(JsonOutputFormat.builder().schema(schema).build())
-                    .build()
-            )
-            .addUserMessage(text)
-            .build()
+    ): ParsedExpense
 
-        val response = client.messages().create(params)
-
-        val stopReason = response.stopReason().orElse(null)
-        if (stopReason == StopReason.REFUSAL) {
-            throw IllegalStateException("Модель отказалась обрабатывать запрос")
+    companion object {
+        /** AI_PROVIDER = "gemini" | "claude"; defaults to gemini when GEMINI_API_KEY is set. */
+        fun fromEnv(): ExpenseParser {
+            val provider = System.getenv("AI_PROVIDER")?.lowercase()
+                ?: if (!System.getenv("GEMINI_API_KEY").isNullOrBlank()) "gemini" else "claude"
+            println("Expense parser provider: $provider")
+            return when (provider) {
+                "gemini" -> GeminiExpenseParser()
+                "claude" -> ClaudeExpenseParser()
+                else -> throw IllegalArgumentException("Unknown AI_PROVIDER: $provider (expected gemini or claude)")
+            }
         }
-        if (stopReason == StopReason.MAX_TOKENS) {
-            throw IllegalStateException("Ответ модели обрезан (max_tokens)")
-        }
-
-        val raw = response.content()
-            .flatMap { block -> block.text().map { listOf(it.text()) }.orElse(emptyList()) }
-            .joinToString("")
-
-        return json.decodeFromString(ParsedExpense.serializer(), raw)
     }
+}
 
-    private fun buildSystemPrompt(
-        categories: List<Category>,
-        subcategories: List<Subcategory>,
-        today: LocalDate
-    ): String {
+/** Prompt and output schema shared by all providers. */
+object ExpensePrompt {
+    fun systemPrompt(categories: List<Category>, subcategories: List<Subcategory>, today: LocalDate): String {
         val dictionary = categories.joinToString("\n") { category ->
             val subs = subcategories.filter { it.categoryId == category.id }
             val subsText = if (subs.isEmpty()) "" else
@@ -105,29 +73,17 @@ class ExpenseParser(
         """.trimIndent()
     }
 
-    private val schema: JsonOutputFormat.Schema = JsonOutputFormat.Schema.builder()
-        .putAdditionalProperty("type", JsonValue.from("object"))
-        .putAdditionalProperty(
-            "properties",
-            JsonValue.from(
-                mapOf(
-                    "understood" to mapOf("type" to "boolean"),
-                    "amount" to mapOf("type" to "number"),
-                    "isIncome" to mapOf("type" to "boolean"),
-                    "currency" to mapOf("type" to "string"),
-                    "date" to mapOf("type" to "string", "description" to "YYYY-MM-DD"),
-                    "categoryId" to mapOf("type" to "integer"),
-                    "subcategoryId" to mapOf("anyOf" to listOf(mapOf("type" to "integer"), mapOf("type" to "null"))),
-                    "comment" to mapOf("type" to "string")
-                )
-            )
-        )
-        .putAdditionalProperty(
-            "required",
-            JsonValue.from(
-                listOf("understood", "amount", "isIncome", "currency", "date", "categoryId", "subcategoryId", "comment")
-            )
-        )
-        .putAdditionalProperty("additionalProperties", JsonValue.from(false))
-        .build()
+    val requiredFields = listOf("understood", "amount", "isIncome", "currency", "date", "categoryId", "subcategoryId", "comment")
+
+    /** JSON Schema properties; [nullableInteger] lets each provider express "integer or null" its own way. */
+    fun properties(nullableInteger: Map<String, Any>): Map<String, Any> = mapOf(
+        "understood" to mapOf("type" to "boolean"),
+        "amount" to mapOf("type" to "number"),
+        "isIncome" to mapOf("type" to "boolean"),
+        "currency" to mapOf("type" to "string"),
+        "date" to mapOf("type" to "string", "description" to "YYYY-MM-DD"),
+        "categoryId" to mapOf("type" to "integer"),
+        "subcategoryId" to nullableInteger,
+        "comment" to mapOf("type" to "string")
+    )
 }

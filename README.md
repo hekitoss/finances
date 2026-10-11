@@ -68,12 +68,15 @@ Environment variables:
 | Variable | Description |
 |---|---|
 | `TELEGRAM_BOT_TOKEN` | Token from @BotFather |
-| `ANTHROPIC_API_KEY` | Claude API key |
+| `AI_PROVIDER` | `gemini` or `claude`; defaults to `gemini` when `GEMINI_API_KEY` is set |
+| `GEMINI_API_KEY` | Gemini API key from https://aistudio.google.com/apikey |
+| `GEMINI_MODEL` | Optional, defaults to `gemini-3.5-flash-lite` |
+| `ANTHROPIC_API_KEY` | Claude API key (when `AI_PROVIDER=claude`) |
 | `CLAUDE_MODEL` | Optional, defaults to `claude-opus-5-5` |
 | `TELEGRAM_USERS_FILE` | Optional path to the users file, defaults to `bot.properties` |
 | `TELEGRAM_USERS` | Optional extra users, `telegramId:PersonName,...`; overrides `bot.properties` |
 
 ```powershell
-$env:TELEGRAM_BOT_TOKEN="..."; $env:ANTHROPIC_API_KEY="..."
+$env:TELEGRAM_BOT_TOKEN="..."; $env:GEMINI_API_KEY="..."
 .\gradlew.bat run
 ```
