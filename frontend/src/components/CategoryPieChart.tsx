@@ -22,6 +22,10 @@ export default function CategoryPieChart({ transactions }: CategoryPieChartProps
         continue;
       }
 
+      if (transaction.currency.trim().toUpperCase() !== "EUR") {
+        continue;
+      }
+
       const numericAmount = Number.parseFloat(transaction.amount);
       if (Number.isNaN(numericAmount)) {
         continue;
