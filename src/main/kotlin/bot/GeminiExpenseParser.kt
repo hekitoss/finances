@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -20,9 +21,10 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 import java.time.LocalDate
+import java.util.Base64
 
 /**
- * Gemini API (Interactions endpoint) with a JSON schema constrained output.
+ * Gemini API (Interactions endpoint) with JSON schema constrained output.
  * Env: GEMINI_API_KEY, GEMINI_MODEL (default gemini-3.5-flash-lite).
  */
 class GeminiExpenseParser(
@@ -32,15 +34,10 @@ class GeminiExpenseParser(
 ) : ExpenseParser {
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
     private val json = Json { ignoreUnknownKeys = true }
+    private val nullableInteger = mapOf("type" to listOf("integer", "null"))
 
-    private val schema: JsonElement = toJson(
-        mapOf(
-            "type" to "object",
-            "properties" to ExpensePrompt.properties(nullableInteger = mapOf("type" to listOf("integer", "null"))),
-            "required" to ExpensePrompt.requiredFields,
-            "additionalProperties" to false
-        )
-    )
+    private val expenseSchema = toJson(ExpensePrompt.expenseSchema(nullableInteger))
+    private val receiptSchema = toJson(ExpensePrompt.receiptSchema(nullableInteger))
 
     override fun parse(
         text: String,
@@ -48,10 +45,48 @@ class GeminiExpenseParser(
         subcategories: List<Subcategory>,
         today: LocalDate
     ): ParsedExpense {
+        val raw = interact(
+            systemInstruction = ExpensePrompt.systemPrompt(categories, subcategories, today),
+            input = JsonPrimitive(text),
+            schema = expenseSchema,
+            thinkingLevel = "minimal"
+        )
+        return json.decodeFromString(ParsedExpense.serializer(), raw)
+    }
+
+    override fun parseReceipt(
+        file: Attachment,
+        caption: String?,
+        categories: List<Category>,
+        subcategories: List<Subcategory>,
+        today: LocalDate
+    ): ParsedReceipt {
+        val input = buildJsonArray {
+            add(buildJsonObject {
+                put("type", if (file.mimeType == "application/pdf") "document" else "image")
+                put("data", Base64.getEncoder().encodeToString(file.bytes))
+                put("mime_type", file.mimeType)
+            })
+            add(buildJsonObject {
+                put("type", "text")
+                put("text", caption?.takeIf { it.isNotBlank() } ?: "Разбери этот чек.")
+            })
+        }
+
+        val raw = interact(
+            systemInstruction = ExpensePrompt.receiptSystemPrompt(categories, subcategories, today),
+            input = input,
+            schema = receiptSchema,
+            thinkingLevel = "low"
+        )
+        return json.decodeFromString(ParsedReceipt.serializer(), raw)
+    }
+
+    private fun interact(systemInstruction: String, input: JsonElement, schema: JsonElement, thinkingLevel: String): String {
         val body = buildJsonObject {
             put("model", model)
-            put("system_instruction", ExpensePrompt.systemPrompt(categories, subcategories, today))
-            put("input", text)
+            put("system_instruction", systemInstruction)
+            put("input", input)
             // Don't keep the interaction on Google's side; we never continue it.
             put("store", false)
             put("response_format", buildJsonObject {
@@ -60,12 +95,12 @@ class GeminiExpenseParser(
                 put("schema", schema)
             })
             put("generation_config", buildJsonObject {
-                put("thinking_level", "minimal")
+                put("thinking_level", thinkingLevel)
             })
         }
 
         val request = HttpRequest.newBuilder(URI.create("https://generativelanguage.googleapis.com/v1beta/interactions"))
-            .timeout(Duration.ofSeconds(60))
+            .timeout(Duration.ofSeconds(120))
             .header("Content-Type", "application/json")
             .header("x-goog-api-key", apiKey)
             .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
@@ -96,8 +131,7 @@ class GeminiExpenseParser(
         if (raw.isBlank()) {
             throw IllegalStateException("Gemini вернул пустой ответ")
         }
-
-        return json.decodeFromString(ParsedExpense.serializer(), raw)
+        return raw
     }
 
     private fun toJson(value: Any?): JsonElement = when (value) {

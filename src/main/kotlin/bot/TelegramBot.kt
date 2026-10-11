@@ -15,6 +15,8 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.contentOrNull
+import model.Subcategory
 import model.Transaction
 import service.DictionaryService
 import service.TransactionService
@@ -27,6 +29,8 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 import java.util.Properties
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Minimal Telegram bot (long polling) that adds transactions from messages like "12.50 кофе".
@@ -47,6 +51,10 @@ class TelegramBot(
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
     private val json = Json { ignoreUnknownKeys = true }
     private val baseUrl = "https://api.telegram.org/bot$token"
+    private val supportedReceiptTypes = setOf("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf")
+
+    /** Transaction ids per receipt for the "undo receipt" button; kept in memory only. */
+    private val receiptTransactions = ConcurrentHashMap<String, List<Int>>()
 
     fun start() {
         val thread = Thread(::pollLoop, "telegram-bot")
@@ -96,13 +104,19 @@ class TelegramBot(
     private fun handleMessage(message: JsonObject) {
         val chatId = message["chat"]!!.jsonObject["id"]!!.jsonPrimitive.long
         val userId = message["from"]?.jsonObject?.get("id")?.jsonPrimitive?.long ?: return
-        val text = message["text"]?.jsonPrimitive?.content?.trim() ?: return
 
         val personName = allowedUsers[userId]
         if (personName == null) {
             sendMessage(chatId, "Нет доступа. Ваш Telegram id: $userId — добавьте его в bot.properties.")
             return
         }
+
+        if (message["photo"] != null || message["document"] != null) {
+            handleReceipt(chatId, message, personName)
+            return
+        }
+
+        val text = message["text"]?.jsonPrimitive?.content?.trim() ?: return
 
         when {
             text.startsWith("/start") || text.startsWith("/help") -> {
@@ -121,7 +135,7 @@ class TelegramBot(
         val parsed = try {
             parser.parse(text, categories, subcategories)
         } catch (e: Exception) {
-            System.err.println("Claude request failed: ${e.message}")
+            System.err.println("AI request failed: ${e.message}")
             sendMessage(chatId, "⚠️ Не удалось обработать сообщение: ${e.message}")
             return
         }
@@ -131,12 +145,9 @@ class TelegramBot(
             return
         }
 
-        val personId = dictionaryService.getAllPersons().firstOrNull { it.name.equals(personName, ignoreCase = true) }?.id
-        val subcategoryId = parsed.subcategoryId?.takeIf { id ->
-            subcategories.any { it.id == id && it.categoryId == parsed.categoryId }
-        }
-        val amount = BigDecimal.valueOf(parsed.amount).setScale(2, RoundingMode.HALF_UP)
-            .let { if (parsed.isIncome) it else it.negate() }
+        val personId = findPersonId(personName)
+        val subcategoryId = validSubcategoryId(parsed.categoryId, parsed.subcategoryId, subcategories)
+        val amount = toCents(parsed.amount).let { if (parsed.isIncome) it else it.negate() }
 
         val created = try {
             transactionService.createTransaction(
@@ -158,17 +169,127 @@ class TelegramBot(
         sendMessage(
             chatId,
             "✅ Добавлено\n" + formatTransaction(created),
-            replyMarkup = buildJsonObject {
-                put("inline_keyboard", buildJsonArray {
-                    add(buildJsonArray {
-                        add(buildJsonObject {
-                            put("text", "↩️ Отменить")
-                            put("callback_data", "del:${created.id}")
-                        })
-                    })
-                })
-            }
+            replyMarkup = undoButton("↩️ Отменить", "del:${created.id}")
         )
+    }
+
+    private fun handleReceipt(chatId: Long, message: JsonObject, personName: String) {
+        val caption = message["caption"]?.jsonPrimitive?.contentOrNull?.trim()
+
+        val (fileId, mimeType) = message["photo"]?.jsonArray?.lastOrNull()?.jsonObject?.let { largest ->
+            largest["file_id"]!!.jsonPrimitive.content to "image/jpeg"
+        } ?: message["document"]!!.jsonObject.let { document ->
+            document["file_id"]!!.jsonPrimitive.content to
+                (document["mime_type"]?.jsonPrimitive?.contentOrNull ?: "application/octet-stream")
+        }
+
+        if (mimeType !in supportedReceiptTypes) {
+            sendMessage(chatId, "📄 Пришли чек фотографией или файлом PDF/JPEG/PNG (получен $mimeType).")
+            return
+        }
+
+        call("sendChatAction", buildJsonObject { put("chat_id", chatId); put("action", "typing") })
+
+        val categories = dictionaryService.getAllCategories()
+        val subcategories = dictionaryService.getAllSubcategories()
+
+        val receipt = try {
+            val file = Attachment(downloadFile(fileId), mimeType)
+            parser.parseReceipt(file, caption, categories, subcategories)
+        } catch (e: Exception) {
+            System.err.println("Receipt parsing failed: ${e.message}")
+            sendMessage(chatId, "⚠️ Не удалось разобрать чек: ${e.message}")
+            return
+        }
+
+        val items = receipt.items.filter { it.amount > 0.0 }
+        if (!receipt.understood || items.isEmpty()) {
+            sendMessage(chatId, "🤔 Не получилось прочитать чек. Попробуй сфотографировать ровнее и при хорошем свете.")
+            return
+        }
+
+        val unknownCategory = items.firstOrNull { item -> categories.none { it.id == item.categoryId } }
+        if (unknownCategory != null) {
+            sendMessage(chatId, "⚠️ ИИ выбрала несуществующую категорию для «${unknownCategory.description}», попробуй ещё раз.")
+            return
+        }
+
+        val personId = findPersonId(personName)
+        val created = mutableListOf<Transaction>()
+        try {
+            for (item in items) {
+                created += transactionService.createTransaction(
+                    TransactionCreateDto(
+                        transactionDate = receipt.date,
+                        amount = toCents(item.amount).negate().toPlainString(),
+                        currency = receipt.currency,
+                        personId = personId,
+                        categoryId = item.categoryId,
+                        subcategoryId = validSubcategoryId(item.categoryId, item.subcategoryId, subcategories),
+                        comment = "${receipt.store}: ${item.description}".take(1000)
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            // Keep a receipt all-or-nothing: roll back the rows inserted so far.
+            created.forEach { transactionService.deleteTransaction(it.id) }
+            sendMessage(chatId, "⚠️ Не удалось сохранить чек: ${e.message}")
+            return
+        }
+
+        val key = UUID.randomUUID().toString().take(8)
+        receiptTransactions[key] = created.map { it.id }
+
+        val sum = created.sumOf { it.amount.negate() }
+        val total = toCents(receipt.total)
+        val text = buildString {
+            append("🧾 ${receipt.store} · ${receipt.date} · $personName\n")
+            append("Добавлено позиций: ${created.size}\n\n")
+            created.forEach { t ->
+                val category = listOfNotNull(t.category, t.subCategory).joinToString(" / ")
+                append("• ${t.comment?.removePrefix("${receipt.store}: ")} — ${t.amount.negate().toPlainString()} · $category\n")
+            }
+            append("\nИтого: ${sum.toPlainString()} ${receipt.currency}")
+            if (sum.compareTo(total) != 0) {
+                append("\n⚠️ Сумма по чеку ${total.toPlainString()} ${receipt.currency} — проверь позиции")
+            }
+        }
+
+        sendMessage(chatId, text.take(4000), replyMarkup = undoButton("↩️ Отменить весь чек", "delr:$key"))
+    }
+
+    private fun downloadFile(fileId: String): ByteArray {
+        val file = call("getFile", buildJsonObject { put("file_id", fileId) }).jsonObject
+        val path = file["file_path"]?.jsonPrimitive?.contentOrNull
+            ?: throw IllegalStateException("Telegram не отдал файл (больше 20 МБ?)")
+        val request = HttpRequest.newBuilder(URI.create("https://api.telegram.org/file/bot$token/$path"))
+            .timeout(Duration.ofSeconds(60))
+            .GET()
+            .build()
+        val response = http.send(request, HttpResponse.BodyHandlers.ofByteArray())
+        if (response.statusCode() != 200) {
+            throw IllegalStateException("Не удалось скачать файл: HTTP ${response.statusCode()}")
+        }
+        return response.body()
+    }
+
+    private fun findPersonId(personName: String): Int? =
+        dictionaryService.getAllPersons().firstOrNull { it.name.equals(personName, ignoreCase = true) }?.id
+
+    private fun validSubcategoryId(categoryId: Int, subcategoryId: Int?, subcategories: List<Subcategory>): Int? =
+        subcategoryId?.takeIf { id -> subcategories.any { it.id == id && it.categoryId == categoryId } }
+
+    private fun toCents(amount: Double): BigDecimal = BigDecimal.valueOf(amount).setScale(2, RoundingMode.HALF_UP)
+
+    private fun undoButton(text: String, callbackData: String): JsonObject = buildJsonObject {
+        put("inline_keyboard", buildJsonArray {
+            add(buildJsonArray {
+                add(buildJsonObject {
+                    put("text", text)
+                    put("callback_data", callbackData)
+                })
+            })
+        })
     }
 
     private fun handleCallback(callback: JsonObject) {
@@ -182,21 +303,34 @@ class TelegramBot(
             return
         }
 
-        if (data.startsWith("del:")) {
-            val id = data.removePrefix("del:").toIntOrNull()
-            val deleted = id != null && transactionService.deleteTransaction(id)
-            call("answerCallbackQuery", buildJsonObject {
-                put("callback_query_id", callbackId)
-                put("text", if (deleted) "Удалено" else "Уже удалено")
-            })
-            if (message != null) {
-                val oldText = message["text"]?.jsonPrimitive?.content ?: ""
-                call("editMessageText", buildJsonObject {
-                    put("chat_id", message["chat"]!!.jsonObject["id"]!!.jsonPrimitive.long)
-                    put("message_id", message["message_id"]!!.jsonPrimitive.int)
-                    put("text", "🗑 Отменено\n" + oldText.substringAfter('\n'))
-                })
+        val answer = when {
+            data.startsWith("del:") -> {
+                val id = data.removePrefix("del:").toIntOrNull()
+                if (id != null && transactionService.deleteTransaction(id)) "Удалено" else "Уже удалено"
             }
+            data.startsWith("delr:") -> {
+                val ids = receiptTransactions.remove(data.removePrefix("delr:"))
+                if (ids == null) {
+                    "Чек не найден (бот перезапускался?) — удали позиции на сайте"
+                } else {
+                    ids.forEach { transactionService.deleteTransaction(it) }
+                    "Удалено позиций: ${ids.size}"
+                }
+            }
+            else -> return
+        }
+
+        call("answerCallbackQuery", buildJsonObject {
+            put("callback_query_id", callbackId)
+            put("text", answer)
+        })
+        if (message != null && !answer.startsWith("Чек не найден")) {
+            val oldText = message["text"]?.jsonPrimitive?.content ?: ""
+            call("editMessageText", buildJsonObject {
+                put("chat_id", message["chat"]!!.jsonObject["id"]!!.jsonPrimitive.long)
+                put("message_id", message["message_id"]!!.jsonPrimitive.int)
+                put("text", "🗑 Отменено\n" + oldText.substringAfter('\n'))
+            })
         }
     }
 
@@ -218,6 +352,9 @@ class TelegramBot(
         • 45 проездной
         • вчера 30 аптека
         • зарплата 4200
+
+        Можно прислать фото или PDF чека — я разобью его на позиции и добавлю каждую отдельно.
+        В подписи к фото можно уточнить, например «вчера».
 
         /categories — список категорий
     """.trimIndent()
