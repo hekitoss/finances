@@ -2,10 +2,21 @@ import { Fragment, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Transaction, TransactionItem } from "../types";
 import { deleteTransaction, fetchTransactionItems } from "../api";
+import ColumnFilterDropdown, { type ColumnFilter } from "./ColumnFilterDropdown";
+
+export interface TransactionsTableFilters {
+  category: ColumnFilter;
+  subcategory: ColumnFilter;
+  person: ColumnFilter;
+  onClear: () => void;
+}
 
 interface TransactionsTableProps {
   transactions: Transaction[];
   onTransactionDeleted: (id: number) => void;
+  filters?: TransactionsTableFilters;
+  /** Show the Edit/Delete actions on each row. */
+  editMode?: boolean;
 }
 
 type ItemsState =
@@ -51,6 +62,10 @@ function RowActions({ id, onDeleted }: { id: number; onDeleted: (id: number) => 
   );
 }
 
+function FilterHeader({ label, filter }: { label: string; filter?: ColumnFilter }) {
+  return <th>{filter ? <ColumnFilterDropdown label={label} filter={filter} /> : label}</th>;
+}
+
 function ItemsToggle({ count, expanded, onToggle }: { count: number; expanded: boolean; onToggle: () => void }) {
   return (
     <button type="button" className="items-toggle" aria-expanded={expanded} onClick={onToggle}>
@@ -85,7 +100,8 @@ function ReceiptItems({ state, currency }: { state: ItemsState | undefined; curr
   );
 }
 
-export default function TransactionsTable({ transactions, onTransactionDeleted }: TransactionsTableProps) {
+export default function TransactionsTable({ transactions, onTransactionDeleted, filters, editMode = false }: TransactionsTableProps) {
+  const columnCount = editMode ? 7 : 6;
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [itemsById, setItemsById] = useState<Record<number, ItemsState>>({});
 
@@ -121,24 +137,44 @@ export default function TransactionsTable({ transactions, onTransactionDeleted }
 
   return (
     <section className="card">
-      <h2>Transactions</h2>
+      <div className="card-title-row">
+        <h2>Transactions</h2>
+        {filters &&
+          (filters.category.selected.length > 0 ||
+            filters.subcategory.selected.length > 0 ||
+            filters.person.selected.length > 0) && (
+          <button type="button" className="clear-filters" onClick={filters.onClear}>
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      {/* Narrow screens have no table header, so the column filters are shown here instead. */}
+      {filters && (
+        <div className="mobile-filters">
+          <ColumnFilterDropdown label="Category" filter={filters.category} />
+          <ColumnFilterDropdown label="Subcategory" filter={filters.subcategory} />
+          <ColumnFilterDropdown label="Person" filter={filters.person} />
+        </div>
+      )}
+
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
               <th className="table-date">Date</th>
-              <th>Category</th>
-              <th>Subcategory</th>
-              <th>Person</th>
+              <FilterHeader label="Category" filter={filters?.category} />
+              <FilterHeader label="Subcategory" filter={filters?.subcategory} />
+              <FilterHeader label="Person" filter={filters?.person} />
               <th className="table-amount">Amount</th>
               <th>Comment</th>
-              <th>Action</th>
+              {editMode && <th>Action</th>}
             </tr>
           </thead>
           <tbody>
             {transactions.length === 0 ? (
               <tr>
-                <td colSpan={7} className="empty">
+                <td colSpan={columnCount} className="empty">
                   No transactions found.
                 </td>
               </tr>
@@ -163,13 +199,15 @@ export default function TransactionsTable({ transactions, onTransactionDeleted }
                           />
                         )}
                       </td>
-                      <td>
-                        <RowActions id={transaction.id} onDeleted={onTransactionDeleted} />
-                      </td>
+                      {editMode && (
+                        <td>
+                          <RowActions id={transaction.id} onDeleted={onTransactionDeleted} />
+                        </td>
+                      )}
                     </tr>
                     {isExpanded && (
                       <tr className="receipt-row">
-                        <td colSpan={7}>
+                        <td colSpan={columnCount}>
                           <ReceiptItems state={itemsById[transaction.id]} currency={transaction.currency} />
                         </td>
                       </tr>
@@ -220,7 +258,7 @@ export default function TransactionsTable({ transactions, onTransactionDeleted }
                     <ReceiptItems state={itemsById[transaction.id]} currency={transaction.currency} />
                   </div>
                 )}
-                <RowActions id={transaction.id} onDeleted={onTransactionDeleted} />
+                {editMode && <RowActions id={transaction.id} onDeleted={onTransactionDeleted} />}
               </li>
             );
           })

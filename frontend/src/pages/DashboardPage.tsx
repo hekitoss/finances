@@ -26,13 +26,27 @@ const DEFAULT_YEAR = currentDate.getFullYear();
 
 const YEARS = Array.from({ length: 11 }, (_, index) => DEFAULT_YEAR - 5 + index);
 
+function uniqueSorted(values: (string | null)[]): string[] {
+  const unique = new Set<string>();
+  for (const value of values) {
+    if (value && value.trim()) {
+      unique.add(value);
+    }
+  }
+  return Array.from(unique).sort((a, b) => a.localeCompare(b));
+}
+
 export default function DashboardPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [editMode, setEditMode] = useState(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [exporting, setExporting] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [selectedMonth, setSelectedMonth] = useState<number>(DEFAULT_MONTH);
   const [selectedYear, setSelectedYear] = useState<number>(DEFAULT_YEAR);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([]);
+  const [selectedPersons, setSelectedPersons] = useState<string[]>([]);
 
   async function loadTransactions(month: number = selectedMonth, year: number = selectedYear) {
     setLoading(true);
@@ -70,8 +84,51 @@ export default function DashboardPage() {
     }
   };
 
+  const categoryOptions = useMemo(() => uniqueSorted(transactions.map((t) => t.category)), [transactions]);
+
+  const subcategoryOptions = useMemo(() => {
+    const source =
+      selectedCategories.length > 0 ? transactions.filter((t) => selectedCategories.includes(t.category)) : transactions;
+    return uniqueSorted(source.map((t) => t.subCategory));
+  }, [transactions, selectedCategories]);
+
+  const personOptions = useMemo(() => uniqueSorted(transactions.map((t) => t.person)), [transactions]);
+
+  // Drop selected subcategories that no longer exist for the chosen categories/period.
+  useEffect(() => {
+    if (selectedSubcategories.some((value) => !subcategoryOptions.includes(value))) {
+      setSelectedSubcategories((prev) => prev.filter((value) => subcategoryOptions.includes(value)));
+    }
+  }, [subcategoryOptions, selectedSubcategories]);
+
+  const personTransactions = useMemo(() => {
+    return selectedPersons.length > 0
+      ? transactions.filter((t) => t.person !== null && selectedPersons.includes(t.person))
+      : transactions;
+  }, [transactions, selectedPersons]);
+
+  const filteredTransactions = useMemo(() => {
+    return personTransactions.filter(
+      (t) =>
+        (selectedCategories.length === 0 || selectedCategories.includes(t.category)) &&
+        (selectedSubcategories.length === 0 || (t.subCategory !== null && selectedSubcategories.includes(t.subCategory)))
+    );
+  }, [personTransactions, selectedCategories, selectedSubcategories]);
+
+  // Clicking a slice shows only that category; clicking it again when it is the only one selected clears the filter.
+  const handleChartCategoryClick = (category: string) => {
+    const isOnlySelected = selectedCategories.length === 1 && selectedCategories[0] === category;
+    setSelectedCategories(isOnlySelected ? [] : [category]);
+  };
+
+  const clearFilters = () => {
+    setSelectedCategories([]);
+    setSelectedSubcategories([]);
+    setSelectedPersons([]);
+  };
+
   const amountSummary = useMemo(() => {
-    return transactions.reduce(
+    return filteredTransactions.reduce(
       (totals, item) => {
         const parsed = Number.parseFloat(item.amount);
         if (Number.isNaN(parsed)) {
@@ -89,11 +146,13 @@ export default function DashboardPage() {
       },
       { expenses: 0, income: 0, total: 0 }
     );
-  }, [transactions]);
+  }, [filteredTransactions]);
 
+  // The chart ignores the category/subcategory filters so every slice stays clickable;
+  // the selected category is highlighted instead.
   const eurTransactionsForChart = useMemo(() => {
-    return transactions.filter((transaction) => transaction.currency.trim().toUpperCase() === "EUR");
-  }, [transactions]);
+    return personTransactions.filter((transaction) => transaction.currency.trim().toUpperCase() === "EUR");
+  }, [personTransactions]);
 
   return (
     <main className="app-shell">
@@ -139,11 +198,11 @@ export default function DashboardPage() {
             </Link>
             <button
               type="button"
-              onClick={() => void loadTransactions()}
+              onClick={() => setEditMode((prev) => !prev)}
               className="button-refresh"
-              disabled={loading}
+              aria-pressed={editMode}
             >
-              {loading ? "Loading..." : "Refresh"}
+              {editMode ? "Done" : "Edit rows"}
             </button>
             <button type="button" onClick={() => void handleExport()} className="button-export" disabled={exporting || loading}>
               {exporting ? "Exporting..." : "Export Excel"}
@@ -157,7 +216,7 @@ export default function DashboardPage() {
       <section className="stats-grid">
         <article className="stat-card">
           <span>Rows</span>
-          <strong>{transactions.length}</strong>
+          <strong>{filteredTransactions.length}</strong>
         </article>
         <article className="stat-card">
           <span>Expenses</span>
@@ -174,8 +233,22 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid-two-columns">
-        <TransactionsTable transactions={transactions} onTransactionDeleted={handleTransactionDeleted} />
-        <CategoryPieChart transactions={eurTransactionsForChart} />
+        <TransactionsTable
+          transactions={filteredTransactions}
+          onTransactionDeleted={handleTransactionDeleted}
+          editMode={editMode}
+          filters={{
+            category: { selected: selectedCategories, options: categoryOptions, onChange: setSelectedCategories },
+            subcategory: { selected: selectedSubcategories, options: subcategoryOptions, onChange: setSelectedSubcategories },
+            person: { selected: selectedPersons, options: personOptions, onChange: setSelectedPersons },
+            onClear: clearFilters
+          }}
+        />
+        <CategoryPieChart
+          transactions={eurTransactionsForChart}
+          selectedCategories={selectedCategories}
+          onCategoryClick={handleChartCategoryClick}
+        />
       </section>
     </main>
   );
