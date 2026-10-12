@@ -8,6 +8,8 @@ import DateRangePicker, { monthRange } from "../components/DateRangePicker";
 
 const currentDate = new Date();
 const DEFAULT_RANGE = monthRange(currentDate.getFullYear(), currentDate.getMonth());
+const CURRENCIES = ["EUR", "RUB"] as const;
+type Currency = (typeof CURRENCIES)[number];
 
 function uniqueSorted(values: (string | null)[]): string[] {
   const unique = new Set<string>();
@@ -26,6 +28,7 @@ export default function DashboardPage() {
   const [exporting, setExporting] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [selectedRange, setSelectedRange] = useState<DateRange>(DEFAULT_RANGE);
+  const [selectedCurrency, setSelectedCurrency] = useState<Currency>("EUR");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([]);
   const [selectedPersons, setSelectedPersons] = useState<string[]>([]);
@@ -66,15 +69,22 @@ export default function DashboardPage() {
     }
   };
 
-  const categoryOptions = useMemo(() => uniqueSorted(transactions.map((t) => t.category)), [transactions]);
+  // Amounts in different currencies must never be summed, so everything below works on one currency only.
+  const currencyTransactions = useMemo(() => {
+    return transactions.filter((t) => t.currency.trim().toUpperCase() === selectedCurrency);
+  }, [transactions, selectedCurrency]);
+
+  const categoryOptions = useMemo(() => uniqueSorted(currencyTransactions.map((t) => t.category)), [currencyTransactions]);
 
   const subcategoryOptions = useMemo(() => {
     const source =
-      selectedCategories.length > 0 ? transactions.filter((t) => selectedCategories.includes(t.category)) : transactions;
+      selectedCategories.length > 0
+        ? currencyTransactions.filter((t) => selectedCategories.includes(t.category))
+        : currencyTransactions;
     return uniqueSorted(source.map((t) => t.subCategory));
-  }, [transactions, selectedCategories]);
+  }, [currencyTransactions, selectedCategories]);
 
-  const personOptions = useMemo(() => uniqueSorted(transactions.map((t) => t.person)), [transactions]);
+  const personOptions = useMemo(() => uniqueSorted(currencyTransactions.map((t) => t.person)), [currencyTransactions]);
 
   // Drop selected subcategories that no longer exist for the chosen categories/period.
   useEffect(() => {
@@ -85,9 +95,9 @@ export default function DashboardPage() {
 
   const personTransactions = useMemo(() => {
     return selectedPersons.length > 0
-      ? transactions.filter((t) => t.person !== null && selectedPersons.includes(t.person))
-      : transactions;
-  }, [transactions, selectedPersons]);
+      ? currencyTransactions.filter((t) => t.person !== null && selectedPersons.includes(t.person))
+      : currencyTransactions;
+  }, [currencyTransactions, selectedPersons]);
 
   const filteredTransactions = useMemo(() => {
     return personTransactions.filter(
@@ -129,12 +139,6 @@ export default function DashboardPage() {
       { expenses: 0, income: 0, total: 0 }
     );
   }, [filteredTransactions]);
-
-  // The chart ignores the category/subcategory filters so every slice stays clickable;
-  // the selected category is highlighted instead.
-  const eurTransactionsForChart = useMemo(() => {
-    return personTransactions.filter((transaction) => transaction.currency.trim().toUpperCase() === "EUR");
-  }, [personTransactions]);
 
   return (
     <main className="app-shell">
@@ -196,11 +200,23 @@ export default function DashboardPage() {
             category: { selected: selectedCategories, options: categoryOptions, onChange: setSelectedCategories },
             subcategory: { selected: selectedSubcategories, options: subcategoryOptions, onChange: setSelectedSubcategories },
             person: { selected: selectedPersons, options: personOptions, onChange: setSelectedPersons },
+            currency: {
+              selected: [selectedCurrency],
+              options: [...CURRENCIES],
+              onChange: (selected) => {
+                const next = CURRENCIES.find((currency) => currency === selected[0]);
+                if (next) {
+                  setSelectedCurrency(next);
+                }
+              }
+            },
             onClear: clearFilters
           }}
         />
+        {/* The chart ignores the category/subcategory filters so every slice stays clickable;
+            the selected category is highlighted instead. */}
         <CategoryPieChart
-          transactions={eurTransactionsForChart}
+          transactions={personTransactions}
           selectedCategories={selectedCategories}
           onCategoryClick={handleChartCategoryClick}
         />

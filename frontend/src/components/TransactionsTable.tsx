@@ -8,6 +8,8 @@ export interface TransactionsTableFilters {
   category: ColumnFilter;
   subcategory: ColumnFilter;
   person: ColumnFilter;
+  /** Single-choice currency filter shown on the Amount column; not affected by Clear filters. */
+  currency?: ColumnFilter;
   onClear: () => void;
 }
 
@@ -62,8 +64,20 @@ function RowActions({ id, onDeleted }: { id: number; onDeleted: (id: number) => 
   );
 }
 
-function FilterHeader({ label, filter }: { label: string; filter?: ColumnFilter }) {
-  return <th>{filter ? <ColumnFilterDropdown label={label} filter={filter} /> : label}</th>;
+function FilterHeader({
+  label,
+  filter,
+  single,
+  className
+}: {
+  label: string;
+  filter?: ColumnFilter;
+  single?: boolean;
+  className?: string;
+}) {
+  return (
+    <th className={className}>{filter ? <ColumnFilterDropdown label={label} filter={filter} single={single} /> : label}</th>
+  );
 }
 
 function ItemsToggle({ count, expanded, onToggle }: { count: number; expanded: boolean; onToggle: () => void }) {
@@ -155,6 +169,7 @@ export default function TransactionsTable({ transactions, onTransactionDeleted, 
           <ColumnFilterDropdown label="Category" filter={filters.category} />
           <ColumnFilterDropdown label="Subcategory" filter={filters.subcategory} />
           <ColumnFilterDropdown label="Person" filter={filters.person} />
+          {filters.currency && <ColumnFilterDropdown label="Amount" filter={filters.currency} single />}
         </div>
       )}
 
@@ -166,7 +181,7 @@ export default function TransactionsTable({ transactions, onTransactionDeleted, 
               <FilterHeader label="Category" filter={filters?.category} />
               <FilterHeader label="Subcategory" filter={filters?.subcategory} />
               <FilterHeader label="Person" filter={filters?.person} />
-              <th className="table-amount">Amount</th>
+              <FilterHeader label="Amount" filter={filters?.currency} single className="table-amount" />
               <th>Comment</th>
               {editMode && <th>Action</th>}
             </tr>

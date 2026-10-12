@@ -9,6 +9,8 @@ export interface ColumnFilter {
 interface ColumnFilterDropdownProps {
   label: string;
   filter: ColumnFilter;
+  /** Exactly one option is always selected (radio buttons, no Reset); the badge shows the chosen value. */
+  single?: boolean;
 }
 
 interface PopoverPosition {
@@ -18,7 +20,7 @@ interface PopoverPosition {
 
 const POPOVER_WIDTH = 220;
 
-export default function ColumnFilterDropdown({ label, filter }: ColumnFilterDropdownProps) {
+export default function ColumnFilterDropdown({ label, filter, single = false }: ColumnFilterDropdownProps) {
   const [position, setPosition] = useState<PopoverPosition | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -76,6 +78,12 @@ export default function ColumnFilterDropdown({ label, filter }: ColumnFilterDrop
   };
 
   const toggleOption = (option: string) => {
+    if (single) {
+      filter.onChange([option]);
+      setPosition(null);
+      return;
+    }
+
     filter.onChange(
       filter.selected.includes(option)
         ? filter.selected.filter((value) => value !== option)
@@ -88,13 +96,13 @@ export default function ColumnFilterDropdown({ label, filter }: ColumnFilterDrop
       <button
         ref={buttonRef}
         type="button"
-        className={`column-filter-button${isActive ? " is-active" : ""}${isOpen ? " is-open" : ""}`}
+        className={`column-filter-button${isActive && !single ? " is-active" : ""}${isOpen ? " is-open" : ""}`}
         onClick={toggleOpen}
         aria-haspopup="true"
         aria-expanded={isOpen}
       >
         {label}
-        {isActive && <span className="column-filter-count">{filter.selected.length}</span>}
+        {isActive && <span className="column-filter-count">{single ? filter.selected[0] : filter.selected.length}</span>}
         <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M3 4.5 6 7.5 9 4.5" />
         </svg>
@@ -113,7 +121,7 @@ export default function ColumnFilterDropdown({ label, filter }: ColumnFilterDrop
             filter.options.map((option) => (
               <label key={option} className="column-filter-option">
                 <input
-                  type="checkbox"
+                  type={single ? "radio" : "checkbox"}
                   checked={filter.selected.includes(option)}
                   onChange={() => toggleOption(option)}
                 />
@@ -121,7 +129,7 @@ export default function ColumnFilterDropdown({ label, filter }: ColumnFilterDrop
               </label>
             ))
           )}
-          {isActive && (
+          {isActive && !single && (
             <button type="button" className="column-filter-reset" onClick={() => filter.onChange([])}>
               Reset
             </button>
