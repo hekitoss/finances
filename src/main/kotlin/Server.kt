@@ -5,6 +5,7 @@ import controller.TransactionsController
 import dao.DictionaryDao
 import dao.TransactionDao
 import db.Database
+import db.DatabaseBackup
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.application.Application
@@ -66,6 +67,10 @@ fun Application.module() {
             transactionService = transactionService,
             dictionaryService = dictionaryService
         ).start()
+    }
+
+    if (System.getenv("BACKUP_DISABLED") != "true") {
+        DatabaseBackup().start()
     }
 
     val frontendDir = File("frontend/dist")

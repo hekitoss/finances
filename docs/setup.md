@@ -80,6 +80,10 @@ java -jar build\libs\finances-all.jar
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Модель Gemini |
 | `ANTHROPIC_API_KEY` | — | Ключ Claude API (при `AI_PROVIDER=claude`) |
 | `CLAUDE_MODEL` | `claude-opus-5-5` | Модель Claude |
+| `BACKUP_DIR` | `backup` | Папка для ежемесячных бэкапов базы |
+| `BACKUP_KEEP` | `12` | Сколько последних бэкапов хранить |
+| `DB_CONTAINER` | `finances_db` | Docker-контейнер, в котором запускается `pg_dump` |
+| `BACKUP_DISABLED` | — | `true` отключает автоматический бэкап |
 
 Постоянно задать переменную в Windows (после этого перезапустите терминал):
 
@@ -102,6 +106,18 @@ setx GEMINI_API_KEY "AIza..."
 
    Имя должно совпадать с записью в таблице `persons`. Файл читается при старте сервера.
 4. Перезапустите сервер. В логе должны появиться строки `Expense parser provider: gemini` и `Telegram bot started (...)`. Напишите боту `/start`.
+
+## Бэкап базы
+
+Сервер сам делает бэкап раз в месяц: при старте и затем каждые 6 часов проверяет, есть ли в папке `backup/` дамп за текущий месяц, и если нет — запускает `pg_dump` в контейнере `finances_db` и сохраняет `backup/finances-ГГГГ-ММ-ДД.sql`. Хранятся последние 12 файлов, более старые удаляются. Нужно, чтобы Docker с базой был запущен; ошибка пишется в лог и в `backup/last-error.log`, следующая попытка через 6 часов.
+
+Восстановление в пустую базу (например, после `docker compose down -v && docker compose up -d`):
+
+```powershell
+Get-Content backup\finances-2026-10-12.sql -Raw | docker exec -i finances_db psql -U finances_user -d finances
+```
+
+Для надёжности держите копию папки `backup/` вне этого компьютера (облако, флешка).
 
 ## Доступ с телефона
 
