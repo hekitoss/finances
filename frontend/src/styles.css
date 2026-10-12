@@ -1136,6 +1136,11 @@ tbody tr:not(.receipt-row):hover td {
     display: block;
   }
 
+  /* On phones the chart comes first, above the transaction cards. */
+  .grid-two-columns > .chart-card {
+    order: -1;
+  }
+
   .chart-card {
     min-height: 0;
   }
