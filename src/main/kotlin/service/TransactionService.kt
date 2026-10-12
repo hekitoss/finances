@@ -35,9 +35,18 @@ class TransactionService(
         return dao.findByDateRange(startDateInclusive = start, endDateExclusive = end)
     }
 
-    fun exportTransactionsByMonthYearToExcel(month: Int, year: Int): ByteArray {
-        val transactions = getTransactionsByMonthYear(month = month, year = year)
+    fun getTransactionsByDateRange(from: LocalDate, to: LocalDate): List<Transaction> {
+        require(!to.isBefore(from)) { "'to' date must not be before 'from' date" }
+        return dao.findByDateRange(startDateInclusive = from, endDateExclusive = to.plusDays(1))
+    }
 
+    fun exportTransactionsByMonthYearToExcel(month: Int, year: Int): ByteArray =
+        exportToExcel(getTransactionsByMonthYear(month = month, year = year))
+
+    fun exportTransactionsByDateRangeToExcel(from: LocalDate, to: LocalDate): ByteArray =
+        exportToExcel(getTransactionsByDateRange(from = from, to = to))
+
+    private fun exportToExcel(transactions: List<Transaction>): ByteArray {
         val workbook = XSSFWorkbook()
         val sheet = workbook.createSheet("Transactions")
 

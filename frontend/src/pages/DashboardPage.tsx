@@ -1,30 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { exportTransactionsExcel, fetchTransactions } from "../api";
+import { exportTransactionsExcel, fetchTransactions, type DateRange } from "../api";
 import type { Transaction } from "../types";
 import TransactionsTable from "../components/TransactionsTable";
 import CategoryPieChart from "../components/CategoryPieChart";
-
-const MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December"
-];
+import DateRangePicker, { monthRange } from "../components/DateRangePicker";
 
 const currentDate = new Date();
-const DEFAULT_MONTH = currentDate.getMonth() + 1;
-const DEFAULT_YEAR = currentDate.getFullYear();
-
-const YEARS = Array.from({ length: 11 }, (_, index) => DEFAULT_YEAR - 5 + index);
+const DEFAULT_RANGE = monthRange(currentDate.getFullYear(), currentDate.getMonth());
 
 function uniqueSorted(values: (string | null)[]): string[] {
   const unique = new Set<string>();
@@ -42,17 +25,16 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [exporting, setExporting] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
-  const [selectedMonth, setSelectedMonth] = useState<number>(DEFAULT_MONTH);
-  const [selectedYear, setSelectedYear] = useState<number>(DEFAULT_YEAR);
+  const [selectedRange, setSelectedRange] = useState<DateRange>(DEFAULT_RANGE);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([]);
   const [selectedPersons, setSelectedPersons] = useState<string[]>([]);
 
-  async function loadTransactions(month: number = selectedMonth, year: number = selectedYear) {
+  async function loadTransactions(range: DateRange = selectedRange) {
     setLoading(true);
     setError("");
     try {
-      const data = await fetchTransactions({ month, year });
+      const data = await fetchTransactions(range);
       setTransactions(data);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
@@ -63,8 +45,8 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    void loadTransactions(selectedMonth, selectedYear);
-  }, [selectedMonth, selectedYear]);
+    void loadTransactions(selectedRange);
+  }, [selectedRange]);
 
   const handleTransactionDeleted = (id: number) => {
     setTransactions((prev) => prev.filter((t) => t.id !== id));
@@ -75,7 +57,7 @@ export default function DashboardPage() {
     setError("");
 
     try {
-      await exportTransactionsExcel({ month: selectedMonth, year: selectedYear });
+      await exportTransactionsExcel(selectedRange);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       setError(message);
@@ -163,34 +145,7 @@ export default function DashboardPage() {
         </div>
         <div className="header-actions">
           <div className="period-filters">
-            <label>
-              Month
-              <select
-                value={selectedMonth}
-                onChange={(event) => setSelectedMonth(Number(event.target.value))}
-                disabled={loading}
-              >
-                {MONTH_NAMES.map((monthName, index) => (
-                  <option key={monthName} value={index + 1}>
-                    {monthName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Year
-              <select
-                value={selectedYear}
-                onChange={(event) => setSelectedYear(Number(event.target.value))}
-                disabled={loading}
-              >
-                {YEARS.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <DateRangePicker value={selectedRange} onChange={setSelectedRange} disabled={loading} />
           </div>
           <div className="header-buttons">
             <Link to="/add" className="button-link">

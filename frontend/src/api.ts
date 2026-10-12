@@ -23,12 +23,18 @@ async function readErrorMessage(response: Response, fallback: string): Promise<s
   return `${fallback}: HTTP ${response.status}`;
 }
 
-export async function fetchTransactions(period?: { month: number; year: number }): Promise<Transaction[]> {
+/** Inclusive date range as YYYY-MM-DD strings. */
+export interface DateRange {
+  from: string;
+  to: string;
+}
+
+export async function fetchTransactions(range?: DateRange): Promise<Transaction[]> {
   const searchParams = new URLSearchParams();
 
-  if (period) {
-    searchParams.set("month", String(period.month));
-    searchParams.set("year", String(period.year));
+  if (range) {
+    searchParams.set("from", range.from);
+    searchParams.set("to", range.to);
   }
 
   const query = searchParams.toString();
@@ -57,11 +63,8 @@ function readFileName(contentDisposition: string | null, fallback: string): stri
   return match?.[1] ?? fallback;
 }
 
-export async function exportTransactionsExcel(period: { month: number; year: number }): Promise<void> {
-  const query = new URLSearchParams({
-    month: String(period.month),
-    year: String(period.year)
-  }).toString();
+export async function exportTransactionsExcel(range: DateRange): Promise<void> {
+  const query = new URLSearchParams({ from: range.from, to: range.to }).toString();
 
   const response = await fetch(`/api/transactions/export?${query}`, {
     headers: {
@@ -74,7 +77,7 @@ export async function exportTransactionsExcel(period: { month: number; year: num
   }
 
   const blob = await response.blob();
-  const fallbackFileName = `transactions-${period.year}-${String(period.month).padStart(2, "0")}.xlsx`;
+  const fallbackFileName = `transactions-${range.from}_${range.to}.xlsx`;
   const fileName = readFileName(response.headers.get("content-disposition"), fallbackFileName);
   const downloadUrl = URL.createObjectURL(blob);
 

@@ -18,6 +18,8 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import service.TransactionService
+import java.time.LocalDate
+import java.time.format.DateTimeParseException
 
 class TransactionsController(private val service: TransactionService) {
     private fun toDto(transaction: model.Transaction): TransactionDto = TransactionDto(
@@ -43,13 +45,35 @@ class TransactionsController(private val service: TransactionService) {
         comment = transaction.comment
     )
 
+    // Parses the inclusive ?from=YYYY-MM-DD&to=YYYY-MM-DD range; null when either is missing or malformed.
+    private fun parseDateRange(from: String?, to: String?): Pair<LocalDate, LocalDate>? {
+        if (from == null || to == null) {
+            return null
+        }
+        return try {
+            LocalDate.parse(from) to LocalDate.parse(to)
+        } catch (e: DateTimeParseException) {
+            null
+        }
+    }
+
     fun registerRoutes(route: Route) {
         route.get("/api/transactions") {
             val monthParam = call.request.queryParameters["month"]
             val yearParam = call.request.queryParameters["year"]
+            val fromParam = call.request.queryParameters["from"]
+            val toParam = call.request.queryParameters["to"]
 
             try {
                 val rows = when {
+                    fromParam != null || toParam != null -> {
+                        val range = parseDateRange(fromParam, toParam)
+                        if (range == null) {
+                            call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Both from and to are required as YYYY-MM-DD dates"))
+                            return@get
+                        }
+                        service.getTransactionsByDateRange(from = range.first, to = range.second)
+                    }
                     monthParam == null && yearParam == null -> service.getAllTransactions()
                     monthParam != null && yearParam != null -> {
                         val month = monthParam.toIntOrNull()
@@ -74,17 +98,32 @@ class TransactionsController(private val service: TransactionService) {
         }
 
         route.get("/api/transactions/export") {
+            val fromParam = call.request.queryParameters["from"]
+            val toParam = call.request.queryParameters["to"]
+            val range = parseDateRange(fromParam, toParam)
             val month = call.request.queryParameters["month"]?.toIntOrNull()
             val year = call.request.queryParameters["year"]?.toIntOrNull()
 
-            if (month == null || year == null) {
+            if (range == null && (fromParam != null || toParam != null)) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Both from and to are required as YYYY-MM-DD dates"))
+                return@get
+            }
+
+            if (range == null && (month == null || year == null)) {
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Month and year are required and must be numbers"))
                 return@get
             }
 
             try {
-                val bytes = service.exportTransactionsByMonthYearToExcel(month = month, year = year)
-                val fileName = "transactions-%04d-%02d.xlsx".format(year, month)
+                val bytes: ByteArray
+                val fileName: String
+                if (range != null) {
+                    bytes = service.exportTransactionsByDateRangeToExcel(from = range.first, to = range.second)
+                    fileName = "transactions-${range.first}_${range.second}.xlsx"
+                } else {
+                    bytes = service.exportTransactionsByMonthYearToExcel(month = month!!, year = year!!)
+                    fileName = "transactions-%04d-%02d.xlsx".format(year, month)
+                }
                 call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"$fileName\"")
                 call.respondBytes(
                     bytes = bytes,

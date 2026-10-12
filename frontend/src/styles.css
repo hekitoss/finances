@@ -119,6 +119,189 @@ a {
   color: var(--text-muted);
 }
 
+/* Date range picker */
+
+.date-range-picker {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.date-range-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.date-range-button {
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--surface);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.date-range-button svg {
+  flex-shrink: 0;
+  color: var(--text-subtle);
+}
+
+.date-range-button:hover {
+  border-color: var(--border-strong);
+}
+
+.date-range-button:focus-visible,
+.date-range-button.is-open {
+  outline: none;
+  border-color: var(--text-subtle);
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+.date-range-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.date-range-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  width: 300px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.date-range-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.date-range-head strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.date-range-nav {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+}
+
+.date-range-nav:hover {
+  background: var(--surface-muted);
+}
+
+.date-range-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  row-gap: 2px;
+}
+
+.date-range-weekday {
+  padding: 4px 0;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-subtle);
+}
+
+.date-range-day {
+  height: 36px;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.date-range-day:hover {
+  background: var(--surface-muted);
+  border-radius: 8px;
+}
+
+.date-range-day.is-today {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.date-range-day.in-range {
+  background: var(--surface-muted);
+  border-radius: 0;
+}
+
+.date-range-day.range-start {
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+
+.date-range-day.range-end {
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+.date-range-day.is-edge {
+  background: var(--primary);
+  color: var(--primary-text);
+}
+
+.date-range-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.date-range-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.date-range-presets button {
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.date-range-presets button:hover {
+  border-color: var(--border-strong);
+}
+
 /* Inputs */
 
 .period-filters select,
@@ -883,9 +1066,31 @@ tbody tr:not(.receipt-row):hover td {
     grid-auto-columns: minmax(0, 1fr);
   }
 
-  .period-filters select {
+  .period-filters select,
+  .date-range-button {
     width: 100%;
     min-width: 0;
+  }
+
+  .date-range-button span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .date-range-popover {
+    left: 0;
+    right: auto;
+    width: min(340px, calc(100vw - 32px));
+  }
+
+  .date-range-day {
+    height: 42px;
+    font-size: 15px;
+  }
+
+  .date-range-presets button {
+    height: 38px;
+    font-size: 13px;
   }
 
   .mobile-filters {
