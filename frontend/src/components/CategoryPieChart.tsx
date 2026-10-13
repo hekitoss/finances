@@ -42,7 +42,7 @@ export default function CategoryPieChart({ transactions, selectedCategories = []
   return (
     <section className="card chart-card">
       <h2>Category distribution</h2>
-      {onCategoryClick && data.length > 0 && <p className="chart-hint">Click a category to filter</p>}
+      {onCategoryClick && data.length > 0 && <p className="chart-hint">Click categories to filter, click again to remove</p>}
       {data.length === 0 ? (
         <p className="empty">No data for chart.</p>
       ) : (

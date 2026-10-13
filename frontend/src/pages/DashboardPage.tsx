@@ -107,10 +107,11 @@ export default function DashboardPage() {
     );
   }, [personTransactions, selectedCategories, selectedSubcategories]);
 
-  // Clicking a slice shows only that category; clicking it again when it is the only one selected clears the filter.
+  // Clicking a slice adds that category to the filter, clicking it again removes it.
   const handleChartCategoryClick = (category: string) => {
-    const isOnlySelected = selectedCategories.length === 1 && selectedCategories[0] === category;
-    setSelectedCategories(isOnlySelected ? [] : [category]);
+    setSelectedCategories((prev) =>
+      prev.includes(category) ? prev.filter((value) => value !== category) : [...prev, category]
+    );
   };
 
   const clearFilters = () => {
