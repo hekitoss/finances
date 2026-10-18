@@ -10,6 +10,44 @@ const currentDate = new Date();
 const DEFAULT_RANGE = monthRange(currentDate.getFullYear(), currentDate.getMonth());
 const CURRENCIES = ["EUR", "RUB"] as const;
 type Currency = (typeof CURRENCIES)[number];
+const FILTERS_STORAGE_KEY = "dashboard-filters";
+
+interface SavedFilters {
+  range: DateRange;
+  currency: Currency;
+  categories: string[];
+  subcategories: string[];
+  persons: string[];
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+// Filters are kept in localStorage so they survive going to the edit/add pages and back.
+function loadSavedFilters(): SavedFilters {
+  const defaults: SavedFilters = { range: DEFAULT_RANGE, currency: "EUR", categories: [], subcategories: [], persons: [] };
+  try {
+    const raw = localStorage.getItem(FILTERS_STORAGE_KEY);
+    if (!raw) {
+      return defaults;
+    }
+    const saved = JSON.parse(raw);
+    const range = saved?.range;
+    return {
+      range:
+        range && typeof range.from === "string" && typeof range.to === "string"
+          ? { from: range.from, to: range.to }
+          : defaults.range,
+      currency: CURRENCIES.find((currency) => currency === saved?.currency) ?? defaults.currency,
+      categories: isStringArray(saved?.categories) ? saved.categories : defaults.categories,
+      subcategories: isStringArray(saved?.subcategories) ? saved.subcategories : defaults.subcategories,
+      persons: isStringArray(saved?.persons) ? saved.persons : defaults.persons
+    };
+  } catch {
+    return defaults;
+  }
+}
 
 function uniqueSorted(values: (string | null)[]): string[] {
   const unique = new Set<string>();
@@ -22,16 +60,32 @@ function uniqueSorted(values: (string | null)[]): string[] {
 }
 
 export default function DashboardPage() {
+  const [savedFilters] = useState(loadSavedFilters);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [editMode, setEditMode] = useState(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [exporting, setExporting] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
-  const [selectedRange, setSelectedRange] = useState<DateRange>(DEFAULT_RANGE);
-  const [selectedCurrency, setSelectedCurrency] = useState<Currency>("EUR");
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([]);
-  const [selectedPersons, setSelectedPersons] = useState<string[]>([]);
+  const [selectedRange, setSelectedRange] = useState<DateRange>(savedFilters.range);
+  const [selectedCurrency, setSelectedCurrency] = useState<Currency>(savedFilters.currency);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(savedFilters.categories);
+  const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>(savedFilters.subcategories);
+  const [selectedPersons, setSelectedPersons] = useState<string[]>(savedFilters.persons);
+
+  useEffect(() => {
+    const filters: SavedFilters = {
+      range: selectedRange,
+      currency: selectedCurrency,
+      categories: selectedCategories,
+      subcategories: selectedSubcategories,
+      persons: selectedPersons
+    };
+    try {
+      localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
+    } catch {
+      // Storage can be unavailable (e.g. private mode); filters then just reset on reload.
+    }
+  }, [selectedRange, selectedCurrency, selectedCategories, selectedSubcategories, selectedPersons]);
 
   async function loadTransactions(range: DateRange = selectedRange) {
     setLoading(true);
@@ -87,11 +141,12 @@ export default function DashboardPage() {
   const personOptions = useMemo(() => uniqueSorted(currencyTransactions.map((t) => t.person)), [currencyTransactions]);
 
   // Drop selected subcategories that no longer exist for the chosen categories/period.
+  // Wait for the data to load, otherwise restored subcategories would be wiped against an empty list.
   useEffect(() => {
-    if (selectedSubcategories.some((value) => !subcategoryOptions.includes(value))) {
+    if (!loading && selectedSubcategories.some((value) => !subcategoryOptions.includes(value))) {
       setSelectedSubcategories((prev) => prev.filter((value) => subcategoryOptions.includes(value)));
     }
-  }, [subcategoryOptions, selectedSubcategories]);
+  }, [loading, subcategoryOptions, selectedSubcategories]);
 
   const personTransactions = useMemo(() => {
     return selectedPersons.length > 0
