@@ -45,7 +45,8 @@ class TelegramBot(
     private val allowedUsers: Map<Long, String>,
     private val parser: ExpenseParser,
     private val transactionService: TransactionService,
-    private val dictionaryService: DictionaryService
+    private val dictionaryService: DictionaryService,
+    private val receiptStorage: ReceiptStorage = ReceiptStorage()
 ) {
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
     private val json = Json { ignoreUnknownKeys = true }
@@ -189,22 +190,32 @@ class TelegramBot(
         val categories = dictionaryService.getAllCategories()
         val subcategories = dictionaryService.getAllSubcategories()
 
+        val bytes = try {
+            downloadFile(fileId)
+        } catch (e: Exception) {
+            System.err.println("Receipt download failed: ${e.message}")
+            sendMessage(chatId, "⚠️ Не удалось скачать чек: ${e.message}")
+            return
+        }
+
         val receipt = try {
-            val file = Attachment(downloadFile(fileId), mimeType)
-            parser.parseReceipt(file, caption, categories, subcategories)
+            parser.parseReceipt(Attachment(bytes, mimeType), caption, categories, subcategories)
         } catch (e: Exception) {
             System.err.println("Receipt parsing failed: ${e.message}")
+            saveReceiptFile { receiptStorage.saveUnmatched(bytes, mimeType) }
             sendMessage(chatId, "⚠️ Не удалось разобрать чек: ${e.message}")
             return
         }
 
         val items = receipt.items.filter { it.amount > 0.0 }
         if (!receipt.understood || items.isEmpty()) {
+            saveReceiptFile { receiptStorage.saveUnmatched(bytes, mimeType) }
             sendMessage(chatId, "🤔 Не получилось прочитать чек. Попробуй сфотографировать ровнее и при хорошем свете.")
             return
         }
 
         if (categories.none { it.id == receipt.categoryId }) {
+            saveReceiptFile { receiptStorage.saveUnmatched(bytes, mimeType) }
             sendMessage(chatId, "⚠️ ИИ выбрала несуществующую категорию для чека, попробуй ещё раз.")
             return
         }
@@ -238,9 +249,12 @@ class TelegramBot(
                 transactionItems
             )
         } catch (e: Exception) {
+            saveReceiptFile { receiptStorage.saveUnmatched(bytes, mimeType) }
             sendMessage(chatId, "⚠️ Не удалось сохранить чек: ${e.message}")
             return
         }
+
+        saveReceiptFile { receiptStorage.saveForTransaction(created.id, created.transactionDate, bytes, mimeType) }
 
         val text = buildString {
             append("🧾 Чек добавлен\n")
@@ -255,6 +269,15 @@ class TelegramBot(
         }
 
         sendMessage(chatId, text.take(4000), replyMarkup = undoButton("↩️ Отменить чек", "del:${created.id}"))
+    }
+
+    /** A failure to keep the file must not break the receipt flow, so it is only logged. */
+    private fun saveReceiptFile(save: () -> File) {
+        try {
+            println("Receipt saved to ${save().path}")
+        } catch (e: Exception) {
+            System.err.println("Failed to save receipt file: ${e.message}")
+        }
     }
 
     private fun downloadFile(fileId: String): ByteArray {
@@ -306,6 +329,7 @@ class TelegramBot(
             // Receipt items are removed together with the transaction (ON DELETE CASCADE).
             val id = data.removePrefix("del:").toIntOrNull()
             val deleted = id != null && transactionService.deleteTransaction(id)
+            if (deleted) receiptStorage.deleteForTransaction(id!!)
             call("answerCallbackQuery", buildJsonObject {
                 put("callback_query_id", callbackId)
                 put("text", if (deleted) "Удалено" else "Уже удалено")

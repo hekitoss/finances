@@ -25,4 +25,5 @@ Thumbs.db
 /frontend/dist/
 *.tsbuildinfo
 /backup/
+/receipts/
 /db-script/console.sql
