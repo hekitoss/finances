@@ -4,6 +4,14 @@ export interface ColumnFilter {
   selected: string[];
   options: string[];
   onChange: (selected: string[]) => void;
+  /** Every option starts checked, and the filter only narrows rows once something is unchecked. */
+  allByDefault?: boolean;
+}
+
+export function isFilterActive(filter: ColumnFilter): boolean {
+  return filter.allByDefault
+    ? filter.options.some((option) => !filter.selected.includes(option))
+    : filter.selected.length > 0;
 }
 
 interface ColumnFilterDropdownProps {
@@ -25,7 +33,7 @@ export default function ColumnFilterDropdown({ label, filter, single = false }: 
   const buttonRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const isOpen = position !== null;
-  const isActive = filter.selected.length > 0;
+  const isActive = isFilterActive(filter);
 
   useEffect(() => {
     if (!isOpen) {
@@ -130,7 +138,7 @@ export default function ColumnFilterDropdown({ label, filter, single = false }: 
             ))
           )}
           {isActive && !single && (
-            <button type="button" className="column-filter-reset" onClick={() => filter.onChange([])}>
+            <button type="button" className="column-filter-reset" onClick={() => filter.onChange(filter.allByDefault ? filter.options : [])}>
               Reset
             </button>
           )}

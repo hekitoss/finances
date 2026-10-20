@@ -2,7 +2,7 @@ import { Fragment, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Transaction, TransactionItem } from "../types";
 import { deleteTransaction, fetchTransactionItems } from "../api";
-import ColumnFilterDropdown, { type ColumnFilter } from "./ColumnFilterDropdown";
+import ColumnFilterDropdown, { isFilterActive, type ColumnFilter } from "./ColumnFilterDropdown";
 
 export interface TransactionsTableFilters {
   category: ColumnFilter;
@@ -154,9 +154,9 @@ export default function TransactionsTable({ transactions, onTransactionDeleted, 
       <div className="card-title-row">
         <h2>Transactions</h2>
         {filters &&
-          (filters.category.selected.length > 0 ||
-            filters.subcategory.selected.length > 0 ||
-            filters.person.selected.length > 0) && (
+          (isFilterActive(filters.category) ||
+            isFilterActive(filters.subcategory) ||
+            isFilterActive(filters.person)) && (
           <button type="button" className="clear-filters" onClick={filters.onClear}>
             Clear filters
           </button>

@@ -15,8 +15,9 @@ const FILTERS_STORAGE_KEY = "dashboard-filters";
 interface SavedFilters {
   range: DateRange;
   currency: Currency;
-  categories: string[];
-  subcategories: string[];
+  /** Categories and subcategories are stored as the unchecked values, so new ones show up checked. */
+  excludedCategories: string[];
+  excludedSubcategories: string[];
   persons: string[];
 }
 
@@ -26,7 +27,7 @@ function isStringArray(value: unknown): value is string[] {
 
 // Filters are kept in localStorage so they survive going to the edit/add pages and back.
 function loadSavedFilters(): SavedFilters {
-  const defaults: SavedFilters = { range: DEFAULT_RANGE, currency: "EUR", categories: [], subcategories: [], persons: [] };
+  const defaults: SavedFilters = { range: DEFAULT_RANGE, currency: "EUR", excludedCategories: [], excludedSubcategories: [], persons: [] };
   try {
     const raw = localStorage.getItem(FILTERS_STORAGE_KEY);
     if (!raw) {
@@ -40,8 +41,12 @@ function loadSavedFilters(): SavedFilters {
           ? { from: range.from, to: range.to }
           : defaults.range,
       currency: CURRENCIES.find((currency) => currency === saved?.currency) ?? defaults.currency,
-      categories: isStringArray(saved?.categories) ? saved.categories : defaults.categories,
-      subcategories: isStringArray(saved?.subcategories) ? saved.subcategories : defaults.subcategories,
+      excludedCategories: isStringArray(saved?.excludedCategories)
+        ? saved.excludedCategories
+        : defaults.excludedCategories,
+      excludedSubcategories: isStringArray(saved?.excludedSubcategories)
+        ? saved.excludedSubcategories
+        : defaults.excludedSubcategories,
       persons: isStringArray(saved?.persons) ? saved.persons : defaults.persons
     };
   } catch {
@@ -68,16 +73,16 @@ export default function DashboardPage() {
   const [error, setError] = useState<string>("");
   const [selectedRange, setSelectedRange] = useState<DateRange>(savedFilters.range);
   const [selectedCurrency, setSelectedCurrency] = useState<Currency>(savedFilters.currency);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(savedFilters.categories);
-  const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>(savedFilters.subcategories);
+  const [excludedCategories, setExcludedCategories] = useState<string[]>(savedFilters.excludedCategories);
+  const [excludedSubcategories, setExcludedSubcategories] = useState<string[]>(savedFilters.excludedSubcategories);
   const [selectedPersons, setSelectedPersons] = useState<string[]>(savedFilters.persons);
 
   useEffect(() => {
     const filters: SavedFilters = {
       range: selectedRange,
       currency: selectedCurrency,
-      categories: selectedCategories,
-      subcategories: selectedSubcategories,
+      excludedCategories,
+      excludedSubcategories,
       persons: selectedPersons
     };
     try {
@@ -85,7 +90,7 @@ export default function DashboardPage() {
     } catch {
       // Storage can be unavailable (e.g. private mode); filters then just reset on reload.
     }
-  }, [selectedRange, selectedCurrency, selectedCategories, selectedSubcategories, selectedPersons]);
+  }, [selectedRange, selectedCurrency, excludedCategories, excludedSubcategories, selectedPersons]);
 
   async function loadTransactions(range: DateRange = selectedRange) {
     setLoading(true);
@@ -130,23 +135,22 @@ export default function DashboardPage() {
 
   const categoryOptions = useMemo(() => uniqueSorted(currencyTransactions.map((t) => t.category)), [currencyTransactions]);
 
+  const selectedCategories = useMemo(
+    () => categoryOptions.filter((category) => !excludedCategories.includes(category)),
+    [categoryOptions, excludedCategories]
+  );
+
   const subcategoryOptions = useMemo(() => {
-    const source =
-      selectedCategories.length > 0
-        ? currencyTransactions.filter((t) => selectedCategories.includes(t.category))
-        : currencyTransactions;
+    const source = currencyTransactions.filter((t) => !excludedCategories.includes(t.category));
     return uniqueSorted(source.map((t) => t.subCategory));
-  }, [currencyTransactions, selectedCategories]);
+  }, [currencyTransactions, excludedCategories]);
+
+  const selectedSubcategories = useMemo(
+    () => subcategoryOptions.filter((subcategory) => !excludedSubcategories.includes(subcategory)),
+    [subcategoryOptions, excludedSubcategories]
+  );
 
   const personOptions = useMemo(() => uniqueSorted(currencyTransactions.map((t) => t.person)), [currencyTransactions]);
-
-  // Drop selected subcategories that no longer exist for the chosen categories/period.
-  // Wait for the data to load, otherwise restored subcategories would be wiped against an empty list.
-  useEffect(() => {
-    if (!loading && selectedSubcategories.some((value) => !subcategoryOptions.includes(value))) {
-      setSelectedSubcategories((prev) => prev.filter((value) => subcategoryOptions.includes(value)));
-    }
-  }, [loading, subcategoryOptions, selectedSubcategories]);
 
   const personTransactions = useMemo(() => {
     return selectedPersons.length > 0
@@ -157,21 +161,44 @@ export default function DashboardPage() {
   const filteredTransactions = useMemo(() => {
     return personTransactions.filter(
       (t) =>
-        (selectedCategories.length === 0 || selectedCategories.includes(t.category)) &&
-        (selectedSubcategories.length === 0 || (t.subCategory !== null && selectedSubcategories.includes(t.subCategory)))
+        !excludedCategories.includes(t.category) &&
+        (t.subCategory === null || !excludedSubcategories.includes(t.subCategory))
     );
-  }, [personTransactions, selectedCategories, selectedSubcategories]);
+  }, [personTransactions, excludedCategories, excludedSubcategories]);
 
-  // Clicking a slice adds that category to the filter, clicking it again removes it.
+  // Unchecked values are kept even when they are not in the current options, so they stay unchecked
+  // after switching period or currency.
+  const handleCategoriesChange = (selected: string[]) => {
+    setExcludedCategories((prev) => [
+      ...prev.filter((category) => !categoryOptions.includes(category)),
+      ...categoryOptions.filter((category) => !selected.includes(category))
+    ]);
+  };
+
+  const handleSubcategoriesChange = (selected: string[]) => {
+    setExcludedSubcategories((prev) => [
+      ...prev.filter((subcategory) => !subcategoryOptions.includes(subcategory)),
+      ...subcategoryOptions.filter((subcategory) => !selected.includes(subcategory))
+    ]);
+  };
+
+  // With everything checked, clicking a slice keeps only that category; after that each click
+  // toggles a category on or off. Unchecking the last category goes back to all checked.
   const handleChartCategoryClick = (category: string) => {
-    setSelectedCategories((prev) =>
-      prev.includes(category) ? prev.filter((value) => value !== category) : [...prev, category]
-    );
+    if (selectedCategories.length === categoryOptions.length) {
+      handleCategoriesChange([category]);
+      return;
+    }
+
+    const next = selectedCategories.includes(category)
+      ? selectedCategories.filter((value) => value !== category)
+      : [...selectedCategories, category];
+    handleCategoriesChange(next.length > 0 ? next : categoryOptions);
   };
 
   const clearFilters = () => {
-    setSelectedCategories([]);
-    setSelectedSubcategories([]);
+    setExcludedCategories([]);
+    setExcludedSubcategories([]);
     setSelectedPersons([]);
   };
 
@@ -253,8 +280,18 @@ export default function DashboardPage() {
           onTransactionDeleted={handleTransactionDeleted}
           editMode={editMode}
           filters={{
-            category: { selected: selectedCategories, options: categoryOptions, onChange: setSelectedCategories },
-            subcategory: { selected: selectedSubcategories, options: subcategoryOptions, onChange: setSelectedSubcategories },
+            category: {
+              selected: selectedCategories,
+              options: categoryOptions,
+              onChange: handleCategoriesChange,
+              allByDefault: true
+            },
+            subcategory: {
+              selected: selectedSubcategories,
+              options: subcategoryOptions,
+              onChange: handleSubcategoriesChange,
+              allByDefault: true
+            },
             person: { selected: selectedPersons, options: personOptions, onChange: setSelectedPersons },
             currency: {
               selected: [selectedCurrency],
@@ -273,7 +310,7 @@ export default function DashboardPage() {
             the selected category is highlighted instead. */}
         <CategoryPieChart
           transactions={personTransactions}
-          selectedCategories={selectedCategories}
+          selectedCategories={selectedCategories.length === categoryOptions.length ? [] : selectedCategories}
           onCategoryClick={handleChartCategoryClick}
         />
       </section>
