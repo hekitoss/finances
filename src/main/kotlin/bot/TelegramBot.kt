@@ -254,7 +254,7 @@ class TelegramBot(
             return
         }
 
-        saveReceiptFile { receiptStorage.saveForTransaction(created.id, created.transactionDate, bytes, mimeType) }
+        saveReceiptFile { receiptStorage.saveForTransaction(created.id, created.transactionDate, receipt.store, bytes, mimeType) }
 
         val text = buildString {
             append("🧾 Чек добавлен\n")
