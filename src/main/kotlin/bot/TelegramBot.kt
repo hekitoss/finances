@@ -52,6 +52,10 @@ class TelegramBot(
     private val json = Json { ignoreUnknownKeys = true }
     private val baseUrl = "https://api.telegram.org/bot$token"
     private val supportedReceiptTypes = setOf("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf")
+    /** Error messages whose retry button was already pressed, so a double tap doesn't process the message twice. */
+    private val usedRetries = java.util.Collections.newSetFromMap(object : LinkedHashMap<String, Boolean>() {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Boolean>) = size > 1000
+    })
 
     fun start() {
         val thread = Thread(::pollLoop, "telegram-bot")
@@ -100,6 +104,7 @@ class TelegramBot(
 
     private fun handleMessage(message: JsonObject) {
         val chatId = message["chat"]!!.jsonObject["id"]!!.jsonPrimitive.long
+        val messageId = message["message_id"]!!.jsonPrimitive.int
         val userId = message["from"]?.jsonObject?.get("id")?.jsonPrimitive?.long ?: return
 
         val personName = allowedUsers[userId]
@@ -109,7 +114,7 @@ class TelegramBot(
         }
 
         if (message["photo"] != null || message["document"] != null) {
-            handleReceipt(chatId, message, personName)
+            handleReceipt(chatId, messageId, message, personName)
             return
         }
 
@@ -133,7 +138,7 @@ class TelegramBot(
             parser.parse(text, categories, subcategories)
         } catch (e: Exception) {
             System.err.println("AI request failed: ${e.message}")
-            sendMessage(chatId, "⚠️ Не удалось обработать сообщение: ${e.message}")
+            sendError(chatId, messageId, "⚠️ Не удалось обработать сообщение: ${e.message}")
             return
         }
 
@@ -159,18 +164,18 @@ class TelegramBot(
                 )
             )
         } catch (e: Exception) {
-            sendMessage(chatId, "⚠️ Не удалось сохранить: ${e.message}")
+            sendError(chatId, messageId, "⚠️ Не удалось сохранить: ${e.message}")
             return
         }
 
         sendMessage(
             chatId,
             "✅ Добавлено\n" + formatTransaction(created),
-            replyMarkup = undoButton("↩️ Отменить", "del:${created.id}")
+            replyMarkup = inlineButton("↩️ Отменить", "del:${created.id}")
         )
     }
 
-    private fun handleReceipt(chatId: Long, message: JsonObject, personName: String) {
+    private fun handleReceipt(chatId: Long, messageId: Int, message: JsonObject, personName: String) {
         val caption = message["caption"]?.jsonPrimitive?.contentOrNull?.trim()
 
         val (fileId, mimeType) = message["photo"]?.jsonArray?.lastOrNull()?.jsonObject?.let { largest ->
@@ -194,7 +199,7 @@ class TelegramBot(
             downloadFile(fileId)
         } catch (e: Exception) {
             System.err.println("Receipt download failed: ${e.message}")
-            sendMessage(chatId, "⚠️ Не удалось скачать чек: ${e.message}")
+            sendError(chatId, messageId, "⚠️ Не удалось скачать чек: ${e.message}")
             return
         }
 
@@ -203,7 +208,7 @@ class TelegramBot(
         } catch (e: Exception) {
             System.err.println("Receipt parsing failed: ${e.message}")
             saveReceiptFile { receiptStorage.saveUnmatched(bytes, mimeType) }
-            sendMessage(chatId, "⚠️ Не удалось разобрать чек: ${e.message}")
+            sendError(chatId, messageId, "⚠️ Не удалось разобрать чек: ${e.message}")
             return
         }
 
@@ -250,7 +255,7 @@ class TelegramBot(
             )
         } catch (e: Exception) {
             saveReceiptFile { receiptStorage.saveUnmatched(bytes, mimeType) }
-            sendMessage(chatId, "⚠️ Не удалось сохранить чек: ${e.message}")
+            sendError(chatId, messageId, "⚠️ Не удалось сохранить чек: ${e.message}")
             return
         }
 
@@ -268,7 +273,7 @@ class TelegramBot(
             }
         }
 
-        sendMessage(chatId, text.take(4000), replyMarkup = undoButton("↩️ Отменить чек", "del:${created.id}"))
+        sendMessage(chatId, text.take(4000), replyMarkup = inlineButton("↩️ Отменить чек", "del:${created.id}"))
     }
 
     /** A failure to keep the file must not break the receipt flow, so it is only logged. */
@@ -303,7 +308,7 @@ class TelegramBot(
 
     private fun toCents(amount: Double): BigDecimal = BigDecimal.valueOf(amount).setScale(2, RoundingMode.HALF_UP)
 
-    private fun undoButton(text: String, callbackData: String): JsonObject = buildJsonObject {
+    private fun inlineButton(text: String, callbackData: String): JsonObject = buildJsonObject {
         put("inline_keyboard", buildJsonArray {
             add(buildJsonArray {
                 add(buildJsonObject {
@@ -322,6 +327,11 @@ class TelegramBot(
 
         if (userId !in allowedUsers) {
             call("answerCallbackQuery", buildJsonObject { put("callback_query_id", callbackId); put("text", "Нет доступа") })
+            return
+        }
+
+        if (data == "retry") {
+            handleRetry(callbackId, message)
             return
         }
 
@@ -346,6 +356,45 @@ class TelegramBot(
                 put("text", "🗑 Отменено\n" + oldText.substringAfter('\n'))
             })
         }
+    }
+
+    /**
+     * Re-processes the message the error replied to. Telegram includes that original message (text, photo or
+     * document with its file_id) in reply_to_message, so nothing has to be kept in memory and it survives restarts.
+     * The error message is deleted first; if the retry fails again, a new error with its own button is sent.
+     */
+    private fun handleRetry(callbackId: String, message: JsonObject?) {
+        val original = message?.get("reply_to_message")?.jsonObject
+        val chatId = message?.get("chat")?.jsonObject?.get("id")?.jsonPrimitive?.long
+        val errorMessageId = message?.get("message_id")?.jsonPrimitive?.int
+        if (original == null || chatId == null || errorMessageId == null) {
+            answerCallback(callbackId, "Исходное сообщение не найдено, пришли его ещё раз")
+            return
+        }
+        if (!usedRetries.add("$chatId:$errorMessageId")) {
+            answerCallback(callbackId, "Уже повторяю")
+            return
+        }
+        answerCallback(callbackId, "Повторяю…")
+        try {
+            call("deleteMessage", buildJsonObject { put("chat_id", chatId); put("message_id", errorMessageId) })
+        } catch (e: Exception) {
+            // Messages older than 48h can't be deleted; just drop the button instead.
+            try {
+                call("editMessageReplyMarkup", buildJsonObject { put("chat_id", chatId); put("message_id", errorMessageId) })
+            } catch (_: Exception) {
+            }
+        }
+        handleMessage(original)
+    }
+
+    private fun answerCallback(callbackId: String, text: String) {
+        call("answerCallbackQuery", buildJsonObject { put("callback_query_id", callbackId); put("text", text) })
+    }
+
+    /** Sends an error as a reply to the failed message, with a button that processes that message again. */
+    private fun sendError(chatId: Long, replyToMessageId: Int, text: String) {
+        sendMessage(chatId, text, replyMarkup = inlineButton("🔄 Повторить", "retry"), replyToMessageId = replyToMessageId)
     }
 
     private fun formatTransaction(t: Transaction): String {
@@ -381,11 +430,15 @@ class TelegramBot(
         }
     }
 
-    private fun sendMessage(chatId: Long, text: String, replyMarkup: JsonObject? = null) {
+    private fun sendMessage(chatId: Long, text: String, replyMarkup: JsonObject? = null, replyToMessageId: Int? = null) {
         call("sendMessage", buildJsonObject {
             put("chat_id", chatId)
-            put("text", text)
+            put("text", text.take(4000))
             if (replyMarkup != null) put("reply_markup", replyMarkup)
+            if (replyToMessageId != null) put("reply_parameters", buildJsonObject {
+                put("message_id", replyToMessageId)
+                put("allow_sending_without_reply", true)
+            })
         })
     }
 

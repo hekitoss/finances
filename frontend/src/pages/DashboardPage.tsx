@@ -13,7 +13,8 @@ type Currency = (typeof CURRENCIES)[number];
 const FILTERS_STORAGE_KEY = "dashboard-filters";
 
 interface SavedFilters {
-  range: DateRange;
+  /** null means "all time". */
+  range: DateRange | null;
   currency: Currency;
   /** Categories and subcategories are stored as the unchecked values, so new ones show up checked. */
   excludedCategories: string[];
@@ -37,9 +38,11 @@ function loadSavedFilters(): SavedFilters {
     const range = saved?.range;
     return {
       range:
-        range && typeof range.from === "string" && typeof range.to === "string"
-          ? { from: range.from, to: range.to }
-          : defaults.range,
+        range === null
+          ? null
+          : range && typeof range.from === "string" && typeof range.to === "string"
+            ? { from: range.from, to: range.to }
+            : defaults.range,
       currency: CURRENCIES.find((currency) => currency === saved?.currency) ?? defaults.currency,
       excludedCategories: isStringArray(saved?.excludedCategories)
         ? saved.excludedCategories
@@ -71,7 +74,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [exporting, setExporting] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
-  const [selectedRange, setSelectedRange] = useState<DateRange>(savedFilters.range);
+  const [selectedRange, setSelectedRange] = useState<DateRange | null>(savedFilters.range);
   const [selectedCurrency, setSelectedCurrency] = useState<Currency>(savedFilters.currency);
   const [excludedCategories, setExcludedCategories] = useState<string[]>(savedFilters.excludedCategories);
   const [excludedSubcategories, setExcludedSubcategories] = useState<string[]>(savedFilters.excludedSubcategories);
@@ -92,7 +95,7 @@ export default function DashboardPage() {
     }
   }, [selectedRange, selectedCurrency, excludedCategories, excludedSubcategories, selectedPersons]);
 
-  async function loadTransactions(range: DateRange = selectedRange) {
+  async function loadTransactions(range: DateRange | null = selectedRange) {
     setLoading(true);
     setError("");
     try {

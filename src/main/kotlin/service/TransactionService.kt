@@ -46,6 +46,8 @@ class TransactionService(
     fun exportTransactionsByDateRangeToExcel(from: LocalDate, to: LocalDate): ByteArray =
         exportToExcel(getTransactionsByDateRange(from = from, to = to))
 
+    fun exportAllTransactionsToExcel(): ByteArray = exportToExcel(getAllTransactions())
+
     private fun exportToExcel(transactions: List<Transaction>): ByteArray {
         val workbook = XSSFWorkbook()
         val sheet = workbook.createSheet("Transactions")

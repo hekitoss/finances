@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import type { DateRange } from "../api";
 
 interface DateRangePickerProps {
-  value: DateRange;
-  onChange: (range: DateRange) => void;
+  /** null means "all time" (no date filter). */
+  value: DateRange | null;
+  onChange: (range: DateRange | null) => void;
   disabled?: boolean;
 }
 
@@ -29,7 +30,10 @@ export function monthRange(year: number, monthIndex: number): DateRange {
   };
 }
 
-function formatRange(range: DateRange): string {
+function formatRange(range: DateRange | null): string {
+  if (range === null) {
+    return "All time";
+  }
   const from = parseIsoDate(range.from);
   const to = parseIsoDate(range.to);
   const dayMonth = (date: Date) => date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
@@ -41,6 +45,12 @@ function formatRange(range: DateRange): string {
     return `${dayMonth(from)} – ${dayMonth(to)} ${to.getFullYear()}`;
   }
   return `${dayMonth(from)} ${from.getFullYear()} – ${dayMonth(to)} ${to.getFullYear()}`;
+}
+
+// The month the calendar opens on: the start of the range, or the current month for "all time".
+function initialView(range: DateRange | null): { year: number; month: number } {
+  const date = range ? parseIsoDate(range.from) : new Date();
+  return { year: date.getFullYear(), month: date.getMonth() };
 }
 
 // Monday-first grid of the month, padded with nulls before the 1st.
@@ -59,10 +69,7 @@ export default function DateRangePicker({ value, onChange, disabled }: DateRange
   // First click of a new selection; the second click completes the range.
   const [pendingStart, setPendingStart] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
-  const [view, setView] = useState(() => {
-    const from = parseIsoDate(value.from);
-    return { year: from.getFullYear(), month: from.getMonth() };
-  });
+  const [view, setView] = useState(() => initialView(value));
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -93,8 +100,7 @@ export default function DateRangePicker({ value, onChange, disabled }: DateRange
 
   const toggleOpen = () => {
     if (!open) {
-      const from = parseIsoDate(value.from);
-      setView({ year: from.getFullYear(), month: from.getMonth() });
+      setView(initialView(value));
       setPendingStart(null);
       setHovered(null);
     }
@@ -108,7 +114,7 @@ export default function DateRangePicker({ value, onChange, disabled }: DateRange
     });
   };
 
-  const apply = (range: DateRange) => {
+  const apply = (range: DateRange | null) => {
     onChange(range);
     setPendingStart(null);
     setHovered(null);
@@ -128,8 +134,9 @@ export default function DateRangePicker({ value, onChange, disabled }: DateRange
   const now = new Date();
 
   // While picking, preview the range up to the hovered day; otherwise show the applied range.
-  let shownFrom = value.from;
-  let shownTo = value.to;
+  // "All time" highlights nothing; empty strings never match an ISO day.
+  let shownFrom = value?.from ?? "";
+  let shownTo = value?.to ?? "";
   if (pendingStart !== null) {
     const other = hovered ?? pendingStart;
     shownFrom = other < pendingStart ? other : pendingStart;
@@ -184,7 +191,7 @@ export default function DateRangePicker({ value, onChange, disabled }: DateRange
                 return <span key={`empty-${index}`} />;
               }
 
-              const inRange = day >= shownFrom && day <= shownTo;
+              const inRange = shownFrom !== "" && day >= shownFrom && day <= shownTo;
               const isEdge = day === shownFrom || day === shownTo;
               const className = [
                 "date-range-day",
@@ -225,6 +232,9 @@ export default function DateRangePicker({ value, onChange, disabled }: DateRange
               onClick={() => apply({ from: toIsoDate(new Date(now.getFullYear(), 0, 1)), to: toIsoDate(new Date(now.getFullYear(), 11, 31)) })}
             >
               This year
+            </button>
+            <button type="button" className={value === null ? "is-active" : ""} onClick={() => apply(null)}>
+              All time
             </button>
           </div>
         </div>

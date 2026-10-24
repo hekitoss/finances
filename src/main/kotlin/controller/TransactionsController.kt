@@ -101,15 +101,19 @@ class TransactionsController(private val service: TransactionService) {
             val fromParam = call.request.queryParameters["from"]
             val toParam = call.request.queryParameters["to"]
             val range = parseDateRange(fromParam, toParam)
-            val month = call.request.queryParameters["month"]?.toIntOrNull()
-            val year = call.request.queryParameters["year"]?.toIntOrNull()
+            val monthParam = call.request.queryParameters["month"]
+            val yearParam = call.request.queryParameters["year"]
+            val month = monthParam?.toIntOrNull()
+            val year = yearParam?.toIntOrNull()
+            // No period params at all means "all time".
+            val exportAll = fromParam == null && toParam == null && monthParam == null && yearParam == null
 
             if (range == null && (fromParam != null || toParam != null)) {
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Both from and to are required as YYYY-MM-DD dates"))
                 return@get
             }
 
-            if (range == null && (month == null || year == null)) {
+            if (range == null && !exportAll && (month == null || year == null)) {
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Month and year are required and must be numbers"))
                 return@get
             }
@@ -120,6 +124,9 @@ class TransactionsController(private val service: TransactionService) {
                 if (range != null) {
                     bytes = service.exportTransactionsByDateRangeToExcel(from = range.first, to = range.second)
                     fileName = "transactions-${range.first}_${range.second}.xlsx"
+                } else if (exportAll) {
+                    bytes = service.exportAllTransactionsToExcel()
+                    fileName = "transactions-all.xlsx"
                 } else {
                     bytes = service.exportTransactionsByMonthYearToExcel(month = month!!, year = year!!)
                     fileName = "transactions-%04d-%02d.xlsx".format(year, month)

@@ -29,7 +29,8 @@ export interface DateRange {
   to: string;
 }
 
-export async function fetchTransactions(range?: DateRange): Promise<Transaction[]> {
+/** A null range means "all time". */
+export async function fetchTransactions(range?: DateRange | null): Promise<Transaction[]> {
   const searchParams = new URLSearchParams();
 
   if (range) {
@@ -63,10 +64,10 @@ function readFileName(contentDisposition: string | null, fallback: string): stri
   return match?.[1] ?? fallback;
 }
 
-export async function exportTransactionsExcel(range: DateRange): Promise<void> {
-  const query = new URLSearchParams({ from: range.from, to: range.to }).toString();
+export async function exportTransactionsExcel(range: DateRange | null): Promise<void> {
+  const query = range ? `?${new URLSearchParams({ from: range.from, to: range.to }).toString()}` : "";
 
-  const response = await fetch(`/api/transactions/export?${query}`, {
+  const response = await fetch(`/api/transactions/export${query}`, {
     headers: {
       Accept: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     }
@@ -77,7 +78,7 @@ export async function exportTransactionsExcel(range: DateRange): Promise<void> {
   }
 
   const blob = await response.blob();
-  const fallbackFileName = `transactions-${range.from}_${range.to}.xlsx`;
+  const fallbackFileName = range ? `transactions-${range.from}_${range.to}.xlsx` : "transactions-all.xlsx";
   const fileName = readFileName(response.headers.get("content-disposition"), fallbackFileName);
   const downloadUrl = URL.createObjectURL(blob);
 
