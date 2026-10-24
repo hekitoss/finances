@@ -905,6 +905,11 @@ tbody tr:not(.receipt-row):hover td {
   height: 360px;
 }
 
+.chart-container .legend-inactive {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
 .chart-hint {
   margin: -8px 0 8px;
   color: var(--text-subtle);

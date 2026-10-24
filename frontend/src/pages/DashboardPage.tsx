@@ -182,8 +182,8 @@ export default function DashboardPage() {
     ]);
   };
 
-  // With everything checked, clicking a slice keeps only that category; after that each click
-  // toggles a category on or off. Unchecking the last category goes back to all checked.
+  // With everything checked, clicking a category keeps only that one; after that each click (slice or
+  // legend) toggles a category on or off. Unchecking the last category goes back to all checked.
   const handleChartCategoryClick = (category: string) => {
     if (selectedCategories.length === categoryOptions.length) {
       handleCategoriesChange([category]);
@@ -306,11 +306,10 @@ export default function DashboardPage() {
             onClear: clearFilters
           }}
         />
-        {/* The chart ignores the category/subcategory filters so every slice stays clickable;
-            the selected category is highlighted instead. */}
+        {/* The chart shows only the active categories; hidden ones stay in the legend so they can be re-added. */}
         <CategoryPieChart
-          transactions={personTransactions}
-          selectedCategories={selectedCategories.length === categoryOptions.length ? [] : selectedCategories}
+          transactions={filteredTransactions}
+          allTransactions={personTransactions}
           onCategoryClick={handleChartCategoryClick}
         />
       </section>
