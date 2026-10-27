@@ -6,6 +6,8 @@ import api.DictionariesDto
 import api.PersonDto
 import api.SubcategoryDto
 import api.SubcategoryCreateDto
+import api.TagCreateDto
+import api.TagDto
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
 import io.ktor.server.request.receive
@@ -23,7 +25,8 @@ class DictionariesController(private val service: DictionaryService) {
                 subcategories = service.getAllSubcategories().map {
                     SubcategoryDto(id = it.id, name = it.name, categoryId = it.categoryId)
                 },
-                persons = service.getAllPersons().map { PersonDto(id = it.id, name = it.name) }
+                persons = service.getAllPersons().map { PersonDto(id = it.id, name = it.name) },
+                tags = service.getAllTags().map { TagDto(id = it.id, name = it.name) }
             )
 
             call.respond(response)
@@ -37,6 +40,19 @@ class DictionariesController(private val service: DictionaryService) {
                 call.respond(HttpStatusCode.Created, CategoryDto(id = created.id, name = created.name))
             } catch (e: IllegalArgumentException) {
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to (e.message ?: "Invalid category payload")))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "unknown")))
+            }
+        }
+
+        route.post("/api/tags") {
+            val create = call.receive<TagCreateDto>()
+
+            try {
+                val created = service.createTag(create.name)
+                call.respond(HttpStatusCode.Created, TagDto(id = created.id, name = created.name))
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to (e.message ?: "Invalid tag payload")))
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "unknown")))
             }

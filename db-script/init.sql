@@ -70,6 +70,19 @@ CREATE TABLE transaction_items (
 );
 CREATE INDEX idx_transaction_items_transaction_id ON transaction_items (transaction_id);
 
+CREATE TABLE tags (
+    id   SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    CONSTRAINT uq_tags_name UNIQUE (name)
+);
+
+CREATE TABLE transaction_tags (
+    transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    tag_id         INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (transaction_id, tag_id)
+);
+CREATE INDEX idx_transaction_tags_tag_id ON transaction_tags (tag_id);
+
 INSERT INTO transactions (transaction_date, amount, currency, person_id, category_id, subcategory_id, comment) VALUES
 (
     '2026-07-01',

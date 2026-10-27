@@ -819,6 +819,75 @@ tbody tr:not(.receipt-row):hover td {
   background: var(--surface-muted);
 }
 
+.transaction-card-tags {
+  margin-top: 6px;
+}
+
+/* Tags */
+
+.tag-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.tag-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.tag-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-picker .tag-chip {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.tag-picker .tag-chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.tag-picker .tag-chip[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-text);
+}
+
+.tag-picker .tag-chip-add {
+  border-style: dashed;
+  background: transparent;
+}
+
+.tag-picker .tag-chip:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .transaction-card .table-actions {
   margin-top: 8px;
   justify-content: flex-end;

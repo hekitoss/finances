@@ -3,6 +3,7 @@ package bot
 import kotlinx.serialization.Serializable
 import model.Category
 import model.Subcategory
+import model.Tag
 import java.time.LocalDate
 
 @Serializable
@@ -14,7 +15,8 @@ data class ParsedExpense(
     val date: String,
     val categoryId: Int,
     val subcategoryId: Int? = null,
-    val comment: String
+    val comment: String,
+    val tagIds: List<Int> = emptyList()
 )
 
 @Serializable
@@ -34,6 +36,7 @@ data class ParsedReceipt(
     val total: Double,
     val categoryId: Int,
     val subcategoryId: Int? = null,
+    val tagIds: List<Int> = emptyList(),
     val items: List<ReceiptItem>
 )
 
@@ -47,6 +50,7 @@ interface ExpenseParser {
         text: String,
         categories: List<Category>,
         subcategories: List<Subcategory>,
+        tags: List<Tag>,
         today: LocalDate = LocalDate.now()
     ): ParsedExpense
 
@@ -56,6 +60,7 @@ interface ExpenseParser {
         caption: String?,
         categories: List<Category>,
         subcategories: List<Subcategory>,
+        tags: List<Tag>,
         today: LocalDate = LocalDate.now()
     ): ParsedReceipt
 
@@ -84,7 +89,21 @@ object ExpensePrompt {
             "- categoryId=${category.id}: ${category.name}$subsText"
         }
 
-    fun systemPrompt(categories: List<Category>, subcategories: List<Subcategory>, today: LocalDate): String =
+    private fun tagList(tags: List<Tag>): String =
+        if (tags.isEmpty()) "(no tags defined yet — always return an empty tagIds list)"
+        else tags.joinToString("\n") { "- tagId=${it.id}: ${it.name}" }
+
+    private fun tagRules(tags: List<Tag>, subject: String): String =
+        """
+            Tags are optional cross-cutting labels on top of the category (e.g. "подарок" for anything bought as a gift,
+            whatever its category). Attach to $subject every tag from this list that clearly applies, judging by the
+            message/caption and the purchase itself; it can be several tags or none. Use only ids from this list:
+            ${tagList(tags)}
+            Don't guess: if nothing clearly fits, return an empty tagIds list. If the user names a tag explicitly
+            (e.g. "#подарок" or "это подарок"), always attach it.
+        """.trimIndent()
+
+    fun systemPrompt(categories: List<Category>, subcategories: List<Subcategory>, tags: List<Tag>, today: LocalDate): String =
         """
             You turn short messages from a personal finance Telegram bot into a single transaction record.
             The user writes an amount and what the money was spent on (or received for), usually in Russian,
@@ -97,6 +116,8 @@ object ExpensePrompt {
             Use only ids from this list:
             ${dictionary(categories, subcategories)}
 
+            ${tagRules(tags, "the transaction")}
+
             Rules:
             - amount is always a positive number; set isIncome=true only for money received (salary, refunds, payments to the user).
             - currency is a 3-letter ISO code; default to EUR unless the message says otherwise (₽/руб → RUB, $ → USD).
@@ -106,7 +127,7 @@ object ExpensePrompt {
               (fill other fields with any valid placeholder values).
         """.trimIndent()
 
-    fun receiptSystemPrompt(categories: List<Category>, subcategories: List<Subcategory>, today: LocalDate): String =
+    fun receiptSystemPrompt(categories: List<Category>, subcategories: List<Subcategory>, tags: List<Tag>, today: LocalDate): String =
         """
             You read a shop receipt (photo or PDF) for a personal finance app and split it into purchased line items.
             The user may add a caption with hints (e.g. "это для работы", "вчера") — take it into account.
@@ -119,6 +140,8 @@ object ExpensePrompt {
             other things. Also pick the best matching category and subcategory for every item.
             Use only ids from this list:
             ${dictionary(categories, subcategories)}
+
+            ${tagRules(tags, "the receipt as a whole")}
 
             Rules:
             - One entry per purchased product line. Skip non-product lines: subtotals, tax/VAT breakdowns,
@@ -145,7 +168,8 @@ object ExpensePrompt {
             "date" to mapOf("type" to "string", "description" to "YYYY-MM-DD"),
             "categoryId" to mapOf("type" to "integer"),
             "subcategoryId" to nullableInteger,
-            "comment" to mapOf("type" to "string")
+            "comment" to mapOf("type" to "string"),
+            "tagIds" to tagIdsSchema
         )
     )
 
@@ -159,6 +183,7 @@ object ExpensePrompt {
             "total" to mapOf("type" to "number"),
             "categoryId" to mapOf("type" to "integer"),
             "subcategoryId" to nullableInteger,
+            "tagIds" to tagIdsSchema,
             "items" to mapOf(
                 "type" to "array",
                 "items" to objectSchema(
@@ -172,6 +197,8 @@ object ExpensePrompt {
             )
         )
     )
+
+    private val tagIdsSchema = mapOf("type" to "array", "items" to mapOf("type" to "integer"))
 
     private fun objectSchema(properties: Map<String, Any>): Map<String, Any> = mapOf(
         "type" to "object",

@@ -8,6 +8,8 @@ export interface TransactionsTableFilters {
   category: ColumnFilter;
   subcategory: ColumnFilter;
   person: ColumnFilter;
+  /** Shows rows that have any of the selected tags. */
+  tags?: ColumnFilter;
   /** Single-choice currency filter shown on the Amount column; not affected by Clear filters. */
   currency?: ColumnFilter;
   onClear: () => void;
@@ -80,6 +82,18 @@ function FilterHeader({
   );
 }
 
+function TagChips({ tags }: { tags: string[] }) {
+  return (
+    <span className="tag-list">
+      {tags.map((tag) => (
+        <span key={tag} className="tag-chip">
+          {tag}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function ItemsToggle({ count, expanded, onToggle }: { count: number; expanded: boolean; onToggle: () => void }) {
   return (
     <button type="button" className="items-toggle" aria-expanded={expanded} onClick={onToggle}>
@@ -115,7 +129,7 @@ function ReceiptItems({ state, currency }: { state: ItemsState | undefined; curr
 }
 
 export default function TransactionsTable({ transactions, onTransactionDeleted, filters, editMode = false }: TransactionsTableProps) {
-  const columnCount = editMode ? 7 : 6;
+  const columnCount = editMode ? 8 : 7;
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [itemsById, setItemsById] = useState<Record<number, ItemsState>>({});
 
@@ -156,7 +170,8 @@ export default function TransactionsTable({ transactions, onTransactionDeleted, 
         {filters &&
           (isFilterActive(filters.category) ||
             isFilterActive(filters.subcategory) ||
-            isFilterActive(filters.person)) && (
+            isFilterActive(filters.person) ||
+            (filters.tags && isFilterActive(filters.tags))) && (
           <button type="button" className="clear-filters" onClick={filters.onClear}>
             Clear filters
           </button>
@@ -169,6 +184,7 @@ export default function TransactionsTable({ transactions, onTransactionDeleted, 
           <ColumnFilterDropdown label="Category" filter={filters.category} />
           <ColumnFilterDropdown label="Subcategory" filter={filters.subcategory} />
           <ColumnFilterDropdown label="Person" filter={filters.person} />
+          {filters.tags && <ColumnFilterDropdown label="Tags" filter={filters.tags} />}
           {filters.currency && <ColumnFilterDropdown label="Amount" filter={filters.currency} single />}
         </div>
       )}
@@ -183,6 +199,7 @@ export default function TransactionsTable({ transactions, onTransactionDeleted, 
               <FilterHeader label="Person" filter={filters?.person} />
               <FilterHeader label="Amount" filter={filters?.currency} single className="table-amount" />
               <th>Comment</th>
+              <FilterHeader label="Tags" filter={filters?.tags} />
               {editMode && <th>Action</th>}
             </tr>
           </thead>
@@ -214,6 +231,7 @@ export default function TransactionsTable({ transactions, onTransactionDeleted, 
                           />
                         )}
                       </td>
+                      <td>{transaction.tags.length > 0 ? <TagChips tags={transaction.tags} /> : "-"}</td>
                       {editMode && (
                         <td>
                           <RowActions id={transaction.id} onDeleted={onTransactionDeleted} />
@@ -266,6 +284,11 @@ export default function TransactionsTable({ transactions, onTransactionDeleted, 
                         onToggle={() => toggleItems(transaction.id)}
                       />
                     )}
+                  </div>
+                )}
+                {transaction.tags.length > 0 && (
+                  <div className="transaction-card-tags">
+                    <TagChips tags={transaction.tags} />
                   </div>
                 )}
                 {isExpanded && (

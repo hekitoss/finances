@@ -8,6 +8,7 @@ import {
   updateTransaction
 } from "../api";
 import type { DictionariesResponse, TransactionCreateRequest } from "../types";
+import TagPicker from "../components/TagPicker";
 
 function emptyToNull(value: string): string | null {
   const trimmed = value.trim();
@@ -55,7 +56,8 @@ export default function EditTransactionPage() {
     personId: "",
     categoryId: "",
     subcategoryId: "",
-    comment: ""
+    comment: "",
+    tagIds: [] as number[]
   });
 
   const isValidTransactionId = Number.isInteger(transactionId) && transactionId > 0;
@@ -97,7 +99,8 @@ export default function EditTransactionPage() {
           personId: transaction.personId ? String(transaction.personId) : "",
           categoryId: String(transaction.categoryId),
           subcategoryId: transaction.subcategoryId ? String(transaction.subcategoryId) : "",
-          comment: transaction.comment ?? ""
+          comment: transaction.comment ?? "",
+          tagIds: transaction.tagIds ?? []
         });
       } catch (err) {
         if (active) {
@@ -175,7 +178,8 @@ export default function EditTransactionPage() {
       personId: form.personId ? Number(form.personId) : null,
       categoryId: Number(form.categoryId),
       subcategoryId: form.subcategoryId ? Number(form.subcategoryId) : null,
-      comment: emptyToNull(form.comment)
+      comment: emptyToNull(form.comment),
+      tagIds: form.tagIds
     };
 
     try {
@@ -388,6 +392,14 @@ export default function EditTransactionPage() {
                 required
               />
             </label>
+
+            <TagPicker
+              tags={dictionaries?.tags ?? []}
+              selectedIds={form.tagIds}
+              onChange={(tagIds) => setForm((prev) => ({ ...prev, tagIds }))}
+              onTagCreated={loadDictionaries}
+              onError={setError}
+            />
 
             <label className="form-grid-full">
               <span>Comment</span>

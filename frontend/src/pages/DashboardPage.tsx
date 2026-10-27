@@ -20,6 +20,7 @@ interface SavedFilters {
   excludedCategories: string[];
   excludedSubcategories: string[];
   persons: string[];
+  tags: string[];
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -28,7 +29,7 @@ function isStringArray(value: unknown): value is string[] {
 
 // Filters are kept in localStorage so they survive going to the edit/add pages and back.
 function loadSavedFilters(): SavedFilters {
-  const defaults: SavedFilters = { range: DEFAULT_RANGE, currency: "EUR", excludedCategories: [], excludedSubcategories: [], persons: [] };
+  const defaults: SavedFilters = { range: DEFAULT_RANGE, currency: "EUR", excludedCategories: [], excludedSubcategories: [], persons: [], tags: [] };
   try {
     const raw = localStorage.getItem(FILTERS_STORAGE_KEY);
     if (!raw) {
@@ -50,7 +51,8 @@ function loadSavedFilters(): SavedFilters {
       excludedSubcategories: isStringArray(saved?.excludedSubcategories)
         ? saved.excludedSubcategories
         : defaults.excludedSubcategories,
-      persons: isStringArray(saved?.persons) ? saved.persons : defaults.persons
+      persons: isStringArray(saved?.persons) ? saved.persons : defaults.persons,
+      tags: isStringArray(saved?.tags) ? saved.tags : defaults.tags
     };
   } catch {
     return defaults;
@@ -79,6 +81,7 @@ export default function DashboardPage() {
   const [excludedCategories, setExcludedCategories] = useState<string[]>(savedFilters.excludedCategories);
   const [excludedSubcategories, setExcludedSubcategories] = useState<string[]>(savedFilters.excludedSubcategories);
   const [selectedPersons, setSelectedPersons] = useState<string[]>(savedFilters.persons);
+  const [selectedTags, setSelectedTags] = useState<string[]>(savedFilters.tags);
 
   useEffect(() => {
     const filters: SavedFilters = {
@@ -86,14 +89,15 @@ export default function DashboardPage() {
       currency: selectedCurrency,
       excludedCategories,
       excludedSubcategories,
-      persons: selectedPersons
+      persons: selectedPersons,
+      tags: selectedTags
     };
     try {
       localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
     } catch {
       // Storage can be unavailable (e.g. private mode); filters then just reset on reload.
     }
-  }, [selectedRange, selectedCurrency, excludedCategories, excludedSubcategories, selectedPersons]);
+  }, [selectedRange, selectedCurrency, excludedCategories, excludedSubcategories, selectedPersons, selectedTags]);
 
   async function loadTransactions(range: DateRange | null = selectedRange) {
     setLoading(true);
@@ -155,11 +159,19 @@ export default function DashboardPage() {
 
   const personOptions = useMemo(() => uniqueSorted(currencyTransactions.map((t) => t.person)), [currencyTransactions]);
 
+  const tagOptions = useMemo(
+    () => uniqueSorted(currencyTransactions.flatMap((t) => t.tags)),
+    [currencyTransactions]
+  );
+
+  // Person and tag filters narrow the rows the chart legend is built from, like the period and currency.
   const personTransactions = useMemo(() => {
-    return selectedPersons.length > 0
-      ? currencyTransactions.filter((t) => t.person !== null && selectedPersons.includes(t.person))
-      : currencyTransactions;
-  }, [currencyTransactions, selectedPersons]);
+    return currencyTransactions.filter(
+      (t) =>
+        (selectedPersons.length === 0 || (t.person !== null && selectedPersons.includes(t.person))) &&
+        (selectedTags.length === 0 || t.tags.some((tag) => selectedTags.includes(tag)))
+    );
+  }, [currencyTransactions, selectedPersons, selectedTags]);
 
   const filteredTransactions = useMemo(() => {
     return personTransactions.filter(
@@ -203,6 +215,7 @@ export default function DashboardPage() {
     setExcludedCategories([]);
     setExcludedSubcategories([]);
     setSelectedPersons([]);
+    setSelectedTags([]);
   };
 
   const amountSummary = useMemo(() => {
@@ -296,6 +309,7 @@ export default function DashboardPage() {
               allByDefault: true
             },
             person: { selected: selectedPersons, options: personOptions, onChange: setSelectedPersons },
+            tags: { selected: selectedTags, options: tagOptions, onChange: setSelectedTags },
             currency: {
               selected: [selectedCurrency],
               options: [...CURRENCIES],

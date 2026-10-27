@@ -21,7 +21,8 @@ class TransactionService(
         val personId: Int?,
         val categoryId: Int,
         val subcategoryId: Int?,
-        val comment: String?
+        val comment: String?,
+        val tagIds: List<Int>?
     )
 
     fun getAllTransactions(): List<Transaction> = dao.findAll()
@@ -53,7 +54,7 @@ class TransactionService(
         val sheet = workbook.createSheet("Transactions")
 
         val headerRow = sheet.createRow(0)
-        val headers = listOf("Date", "Amount", "Currency", "Person", "Category", "Subcategory", "Comment")
+        val headers = listOf("Date", "Amount", "Currency", "Person", "Category", "Subcategory", "Comment", "Tags")
         headers.forEachIndexed { index, header ->
             headerRow.createCell(index).setCellValue(header)
         }
@@ -67,6 +68,7 @@ class TransactionService(
             row.createCell(4).setCellValue(transaction.category)
             row.createCell(5).setCellValue(transaction.subCategory ?: "")
             row.createCell(6).setCellValue(transaction.comment ?: "")
+            row.createCell(7).setCellValue(transaction.tags.joinToString(", "))
         }
 
         repeat(headers.size) { sheet.autoSizeColumn(it) }
@@ -94,7 +96,8 @@ class TransactionService(
             personId = input.personId,
             categoryId = input.categoryId,
             subcategoryId = input.subcategoryId,
-            comment = input.comment
+            comment = input.comment,
+            tagIds = input.tagIds.orEmpty()
         )
     }
 
@@ -128,7 +131,8 @@ class TransactionService(
             categoryId = input.categoryId,
             subcategoryId = input.subcategoryId,
             comment = input.comment,
-            items = normalizedItems
+            items = normalizedItems,
+            tagIds = input.tagIds.orEmpty()
         )
     }
 
@@ -144,7 +148,8 @@ class TransactionService(
             personId = input.personId,
             categoryId = input.categoryId,
             subcategoryId = input.subcategoryId,
-            comment = input.comment
+            comment = input.comment,
+            tagIds = input.tagIds
         )
     }
 
@@ -177,6 +182,13 @@ class TransactionService(
             }
         }
 
+        val tagIds = create.tagIds?.distinct()
+        if (!tagIds.isNullOrEmpty()) {
+            val knownTagIds = dictionaryService.getAllTags().map { it.id }.toSet()
+            val unknown = tagIds.filterNot { it in knownTagIds }
+            require(unknown.isEmpty()) { "Unknown tag id(s): ${unknown.joinToString()}" }
+        }
+
         return TransactionInput(
             transactionDate = date,
             amount = amount,
@@ -184,7 +196,8 @@ class TransactionService(
             personId = personId,
             categoryId = categoryId,
             subcategoryId = subcategoryId,
-            comment = comment
+            comment = comment,
+            tagIds = tagIds
         )
     }
 }

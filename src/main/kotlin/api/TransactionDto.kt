@@ -12,7 +12,8 @@ data class TransactionDto(
     val category: String,
     val subCategory: String? = null,
     val comment: String? = null,
-    val itemsCount: Int = 0
+    val itemsCount: Int = 0,
+    val tags: List<String> = emptyList()
 )
 
 @Serializable
@@ -34,7 +35,8 @@ data class TransactionFormDto(
     val personId: Int? = null,
     val categoryId: Int,
     val subcategoryId: Int? = null,
-    val comment: String? = null
+    val comment: String? = null,
+    val tagIds: List<Int> = emptyList()
 )
 
 @Serializable
@@ -45,6 +47,8 @@ data class TransactionCreateDto(
     val personId: Int? = null,
     val categoryId: Int,
     val subcategoryId: Int? = null,
-    val comment: String? = null
+    val comment: String? = null,
+    /** Replaces the transaction's tags; null leaves them unchanged on update. */
+    val tagIds: List<Int>? = null
 )
 

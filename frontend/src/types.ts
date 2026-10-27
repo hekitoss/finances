@@ -8,6 +8,7 @@ export interface Transaction {
   subCategory: string | null;
   comment: string | null;
   itemsCount: number;
+  tags: string[];
 }
 
 export interface TransactionItem {
@@ -28,6 +29,7 @@ export interface TransactionFormData {
   categoryId: number;
   subcategoryId: number | null;
   comment: string | null;
+  tagIds: number[];
 }
 
 export interface TransactionCreateRequest {
@@ -38,9 +40,15 @@ export interface TransactionCreateRequest {
   categoryId: number;
   subcategoryId: number | null;
   comment: string | null;
+  /** Replaces the transaction's tags. */
+  tagIds: number[];
 }
 
 export interface CategoryCreateRequest {
+  name: string;
+}
+
+export interface TagCreateRequest {
   name: string;
 }
 
@@ -64,5 +72,6 @@ export interface DictionariesResponse {
   categories: NamedDictionaryItem[];
   subcategories: SubcategoryDictionaryItem[];
   persons: NamedDictionaryItem[];
+  tags: NamedDictionaryItem[];
 }
 

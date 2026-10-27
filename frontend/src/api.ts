@@ -4,6 +4,7 @@ import type {
   NamedDictionaryItem,
   SubcategoryCreateRequest,
   SubcategoryDictionaryItem,
+  TagCreateRequest,
   Transaction,
   TransactionCreateRequest,
   TransactionFormData,
@@ -52,7 +53,8 @@ export async function fetchTransactions(range?: DateRange | null): Promise<Trans
   }
 
   const data = (await response.json()) as Transaction[];
-  return data;
+  // A server without tag support omits the field; keep the UI working until it is restarted.
+  return data.map((transaction) => ({ ...transaction, tags: transaction.tags ?? [] }));
 }
 
 function readFileName(contentDisposition: string | null, fallback: string): string {
@@ -208,6 +210,24 @@ export async function createSubcategory(payload: SubcategoryCreateRequest): Prom
   }
 
   const data = (await response.json()) as SubcategoryDictionaryItem;
+  return data;
+}
+
+export async function createTag(payload: TagCreateRequest): Promise<NamedDictionaryItem> {
+  const response = await fetch("/api/tags", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "Failed to create tag"));
+  }
+
+  const data = (await response.json()) as NamedDictionaryItem;
   return data;
 }
 

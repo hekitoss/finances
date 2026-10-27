@@ -17,6 +17,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.contentOrNull
 import model.Subcategory
+import model.Tag
 import model.Transaction
 import model.TransactionItem
 import service.DictionaryService
@@ -129,13 +130,18 @@ class TelegramBot(
                 sendMessage(chatId, categoriesText())
                 return
             }
+            text.startsWith("/tags") -> {
+                sendMessage(chatId, tagsText())
+                return
+            }
         }
 
         val categories = dictionaryService.getAllCategories()
         val subcategories = dictionaryService.getAllSubcategories()
+        val tags = dictionaryService.getAllTags()
 
         val parsed = try {
-            parser.parse(text, categories, subcategories)
+            parser.parse(text, categories, subcategories, tags)
         } catch (e: Exception) {
             System.err.println("AI request failed: ${e.message}")
             sendError(chatId, messageId, "⚠️ Не удалось обработать сообщение: ${e.message}")
@@ -160,7 +166,8 @@ class TelegramBot(
                     personId = personId,
                     categoryId = parsed.categoryId,
                     subcategoryId = subcategoryId,
-                    comment = parsed.comment
+                    comment = parsed.comment,
+                    tagIds = validTagIds(parsed.tagIds, tags)
                 )
             )
         } catch (e: Exception) {
@@ -194,6 +201,7 @@ class TelegramBot(
 
         val categories = dictionaryService.getAllCategories()
         val subcategories = dictionaryService.getAllSubcategories()
+        val tags = dictionaryService.getAllTags()
 
         val bytes = try {
             downloadFile(fileId)
@@ -204,7 +212,7 @@ class TelegramBot(
         }
 
         val receipt = try {
-            parser.parseReceipt(Attachment(bytes, mimeType), caption, categories, subcategories)
+            parser.parseReceipt(Attachment(bytes, mimeType), caption, categories, subcategories, tags)
         } catch (e: Exception) {
             System.err.println("Receipt parsing failed: ${e.message}")
             saveReceiptFile { receiptStorage.saveUnmatched(bytes, mimeType) }
@@ -249,7 +257,8 @@ class TelegramBot(
                     personId = findPersonId(personName),
                     categoryId = receipt.categoryId,
                     subcategoryId = validSubcategoryId(receipt.categoryId, receipt.subcategoryId, subcategories),
-                    comment = receipt.store.take(1000)
+                    comment = receipt.store.take(1000),
+                    tagIds = validTagIds(receipt.tagIds, tags)
                 ),
                 transactionItems
             )
@@ -305,6 +314,10 @@ class TelegramBot(
 
     private fun validSubcategoryId(categoryId: Int, subcategoryId: Int?, subcategories: List<Subcategory>): Int? =
         subcategoryId?.takeIf { id -> subcategories.any { it.id == id && it.categoryId == categoryId } }
+
+    /** Drops tag ids the model made up; tags are optional, so this never fails the message. */
+    private fun validTagIds(tagIds: List<Int>, tags: List<Tag>): List<Int> =
+        tagIds.distinct().filter { id -> tags.any { it.id == id } }
 
     private fun toCents(amount: Double): BigDecimal = BigDecimal.valueOf(amount).setScale(2, RoundingMode.HALF_UP)
 
@@ -402,6 +415,7 @@ class TelegramBot(
         return buildString {
             append("${t.amount.toPlainString()} ${t.currency} · $category\n")
             t.comment?.let { append("$it\n") }
+            if (t.tags.isNotEmpty()) append(t.tags.joinToString(" ", postfix = "\n") { "#$it" })
             append(t.transactionDate.toString())
             t.person?.let { append(" · $it") }
         }
@@ -419,7 +433,10 @@ class TelegramBot(
         Можно прислать фото или PDF чека — я добавлю его одной тратой и сохраню все позиции.
         В подписи к фото можно уточнить, например «вчера».
 
+        Тэги (например «подарок») я подбираю сам, можно и подсказать: «30 цветы маме, подарок».
+
         /categories — список категорий
+        /tags — список тэгов
     """.trimIndent()
 
     private fun categoriesText(): String {
@@ -428,6 +445,12 @@ class TelegramBot(
             val subs = subcategories.filter { it.categoryId == category.id }.joinToString { it.name }
             if (subs.isEmpty()) "• ${category.name}" else "• ${category.name}: $subs"
         }
+    }
+
+    private fun tagsText(): String {
+        val tags = dictionaryService.getAllTags()
+        return if (tags.isEmpty()) "Тэгов пока нет — их можно добавить на сайте в форме записи."
+        else tags.joinToString("\n") { "• ${it.name}" }
     }
 
     private fun sendMessage(chatId: Long, text: String, replyMarkup: JsonObject? = null, replyToMessageId: Int? = null) {

@@ -16,6 +16,9 @@ data class Transaction(
     val subCategory: String?,
     val comment: String?,
     /** Number of line items (receipt positions) attached to this transaction. */
-    val itemsCount: Int = 0
+    val itemsCount: Int = 0,
+    /** Tags attached to this transaction, sorted by name; [tagIds] are in the same order. */
+    val tags: List<String> = emptyList(),
+    val tagIds: List<Int> = emptyList()
 )
 

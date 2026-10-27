@@ -3,6 +3,7 @@ package dao
 import model.Category
 import model.Person
 import model.Subcategory
+import model.Tag
 import java.sql.SQLException
 import javax.sql.DataSource
 
@@ -64,6 +65,49 @@ class DictionaryDao(private val ds: DataSource) {
                 }
             }
         }
+    }
+
+    fun findAllTags(): List<Tag> {
+        val sql = "SELECT id, name FROM tags ORDER BY name"
+
+        ds.connection.use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.executeQuery().use { rs ->
+                    val rows = mutableListOf<Tag>()
+                    while (rs.next()) {
+                        rows += Tag(
+                            id = rs.getInt("id"),
+                            name = rs.getString("name")
+                        )
+                    }
+                    return rows
+                }
+            }
+        }
+    }
+
+    fun insertTag(name: String): Tag {
+        val sql = "INSERT INTO tags (name) VALUES (?) RETURNING id, name"
+
+        ds.connection.use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setString(1, name)
+                try {
+                    stmt.executeQuery().use { rs ->
+                        if (rs.next()) {
+                            return Tag(
+                                id = rs.getInt("id"),
+                                name = rs.getString("name")
+                            )
+                        }
+                    }
+                } catch (e: SQLException) {
+                    throw mapInsertException(e, "Tag '$name' already exists")
+                }
+            }
+        }
+
+        throw IllegalStateException("Failed to insert tag")
     }
 
     fun insertCategory(name: String): Category {

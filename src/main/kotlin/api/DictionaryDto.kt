@@ -33,9 +33,21 @@ data class SubcategoryCreateDto(
 )
 
 @Serializable
+data class TagDto(
+    val id: Int,
+    val name: String
+)
+
+@Serializable
+data class TagCreateDto(
+    val name: String
+)
+
+@Serializable
 data class DictionariesDto(
     val categories: List<CategoryDto>,
     val subcategories: List<SubcategoryDto>,
-    val persons: List<PersonDto>
+    val persons: List<PersonDto>,
+    val tags: List<TagDto> = emptyList()
 )
 

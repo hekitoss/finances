@@ -4,6 +4,7 @@ import dao.DictionaryDao
 import model.Category
 import model.Person
 import model.Subcategory
+import model.Tag
 
 class DictionaryService(private val dao: DictionaryDao) {
     fun getAllCategories(): List<Category> = dao.findAllCategories()
@@ -11,6 +12,14 @@ class DictionaryService(private val dao: DictionaryDao) {
     fun getAllSubcategories(): List<Subcategory> = dao.findAllSubcategories()
 
     fun getAllPersons(): List<Person> = dao.findAllPersons()
+
+    fun getAllTags(): List<Tag> = dao.findAllTags()
+
+    fun createTag(name: String): Tag {
+        val normalized = normalizeName(name).lowercase()
+        require(normalized.length <= 100) { "Tag name must be at most 100 characters" }
+        return dao.insertTag(normalized)
+    }
 
     fun createCategory(name: String): Category {
         val normalized = normalizeName(name)

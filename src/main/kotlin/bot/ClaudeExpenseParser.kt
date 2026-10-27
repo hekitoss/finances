@@ -16,6 +16,7 @@ import com.anthropic.models.messages.TextBlockParam
 import kotlinx.serialization.json.Json
 import model.Category
 import model.Subcategory
+import model.Tag
 import java.time.LocalDate
 import java.util.Base64
 
@@ -34,10 +35,11 @@ class ClaudeExpenseParser(
         text: String,
         categories: List<Category>,
         subcategories: List<Subcategory>,
+        tags: List<Tag>,
         today: LocalDate
     ): ParsedExpense {
         val raw = request(
-            system = ExpensePrompt.systemPrompt(categories, subcategories, today),
+            system = ExpensePrompt.systemPrompt(categories, subcategories, tags, today),
             content = listOf(textBlock(text)),
             schema = expenseSchema,
             effort = OutputConfig.Effort.LOW
@@ -50,6 +52,7 @@ class ClaudeExpenseParser(
         caption: String?,
         categories: List<Category>,
         subcategories: List<Subcategory>,
+        tags: List<Tag>,
         today: LocalDate
     ): ParsedReceipt {
         val data = Base64.getEncoder().encodeToString(file.bytes)
@@ -73,7 +76,7 @@ class ClaudeExpenseParser(
         }
 
         val raw = request(
-            system = ExpensePrompt.receiptSystemPrompt(categories, subcategories, today),
+            system = ExpensePrompt.receiptSystemPrompt(categories, subcategories, tags, today),
             content = listOf(fileBlock, textBlock(caption?.takeIf { it.isNotBlank() } ?: "Разбери этот чек.")),
             schema = receiptSchema,
             effort = OutputConfig.Effort.MEDIUM

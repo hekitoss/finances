@@ -11,6 +11,12 @@ import javax.sql.DataSource
 
 class TransactionDao(private val ds: DataSource) {
 
+    /** Tag names and ids of the transaction [idColumn], both sorted by tag name; empty arrays when it has none. */
+    private fun tagColumns(idColumn: String) = """
+        ARRAY(SELECT tg.name FROM transaction_tags tt JOIN tags tg ON tg.id = tt.tag_id WHERE tt.transaction_id = $idColumn ORDER BY tg.name, tg.id) AS tags,
+        ARRAY(SELECT tg.id FROM transaction_tags tt JOIN tags tg ON tg.id = tt.tag_id WHERE tt.transaction_id = $idColumn ORDER BY tg.name, tg.id) AS tag_ids
+    """.trimIndent()
+
     private val baseSelect = """
         SELECT
             t.id,
@@ -24,7 +30,8 @@ class TransactionDao(private val ds: DataSource) {
             t.subcategory_id,
             s.name AS sub_category,
             t.comment,
-            (SELECT count(*) FROM transaction_items ti WHERE ti.transaction_id = t.id) AS items_count
+            (SELECT count(*) FROM transaction_items ti WHERE ti.transaction_id = t.id) AS items_count,
+            ${tagColumns("t.id")}
         FROM transactions t
         LEFT JOIN persons p ON p.id = t.person_id
         JOIN categories c ON c.id = t.category_id
@@ -67,14 +74,18 @@ class TransactionDao(private val ds: DataSource) {
     }
 
     fun findById(id: Int): Transaction? {
+        ds.connection.use { conn ->
+            return findByIdOn(conn, id)
+        }
+    }
+
+    private fun findByIdOn(conn: Connection, id: Int): Transaction? {
         val sql = "$baseSelect WHERE t.id = ?"
 
-        ds.connection.use { conn ->
-            conn.prepareStatement(sql).use { stmt ->
-                stmt.setInt(1, id)
-                stmt.executeQuery().use { rs ->
-                    return if (rs.next()) mapRow(rs) else null
-                }
+        conn.prepareStatement(sql).use { stmt ->
+            stmt.setInt(1, id)
+            stmt.executeQuery().use { rs ->
+                return if (rs.next()) mapRow(rs) else null
             }
         }
     }
@@ -86,10 +97,52 @@ class TransactionDao(private val ds: DataSource) {
         personId: Int?,
         categoryId: Int,
         subcategoryId: Int?,
-        comment: String?
-    ): Transaction {
+        comment: String?,
+        tagIds: List<Int> = emptyList()
+    ): Transaction = inTransaction { conn ->
+        val transaction = insertOn(conn, transactionDate, amount, currency, personId, categoryId, subcategoryId, comment)
+        if (tagIds.isEmpty()) {
+            transaction
+        } else {
+            replaceTags(conn, transaction.id, tagIds)
+            findByIdOn(conn, transaction.id)!!
+        }
+    }
+
+    /** Runs [block] in one DB transaction, rolling back on any exception. */
+    private fun <T> inTransaction(block: (Connection) -> T): T {
         ds.connection.use { conn ->
-            return insertOn(conn, transactionDate, amount, currency, personId, categoryId, subcategoryId, comment)
+            val autoCommit = conn.autoCommit
+            conn.autoCommit = false
+            try {
+                val result = block(conn)
+                conn.commit()
+                return result
+            } catch (e: Exception) {
+                conn.rollback()
+                throw e
+            } finally {
+                conn.autoCommit = autoCommit
+            }
+        }
+    }
+
+    /** Sets the transaction's tags to exactly [tagIds]. */
+    private fun replaceTags(conn: Connection, transactionId: Int, tagIds: List<Int>) {
+        conn.prepareStatement("DELETE FROM transaction_tags WHERE transaction_id = ?").use { stmt ->
+            stmt.setInt(1, transactionId)
+            stmt.executeUpdate()
+        }
+        if (tagIds.isEmpty()) {
+            return
+        }
+        conn.prepareStatement("INSERT INTO transaction_tags (transaction_id, tag_id) VALUES (?, ?) ON CONFLICT DO NOTHING").use { stmt ->
+            tagIds.forEach { tagId ->
+                stmt.setInt(1, transactionId)
+                stmt.setInt(2, tagId)
+                stmt.addBatch()
+            }
+            stmt.executeBatch()
         }
     }
 
@@ -102,7 +155,8 @@ class TransactionDao(private val ds: DataSource) {
         categoryId: Int,
         subcategoryId: Int?,
         comment: String?,
-        items: List<TransactionItem>
+        items: List<TransactionItem>,
+        tagIds: List<Int> = emptyList()
     ): Transaction {
         val itemSql = """
             INSERT INTO transaction_items (transaction_id, position, name, amount, category_id, subcategory_id)
@@ -126,8 +180,10 @@ class TransactionDao(private val ds: DataSource) {
                     }
                     stmt.executeBatch()
                 }
+                replaceTags(conn, transaction.id, tagIds)
+                val saved = findByIdOn(conn, transaction.id)!!
                 conn.commit()
-                return transaction.copy(itemsCount = items.size)
+                return saved
             } catch (e: Exception) {
                 conn.rollback()
                 throw e
@@ -196,7 +252,9 @@ class TransactionDao(private val ds: DataSource) {
                 i.subcategory_id,
                 s.name AS sub_category,
                 i.comment,
-                0 AS items_count
+                0 AS items_count,
+                ARRAY[]::varchar[] AS tags,
+                ARRAY[]::integer[] AS tag_ids
             FROM inserted i
             LEFT JOIN persons p ON p.id = i.person_id
             JOIN categories c ON c.id = i.category_id
@@ -241,7 +299,8 @@ class TransactionDao(private val ds: DataSource) {
         personId: Int?,
         categoryId: Int,
         subcategoryId: Int?,
-        comment: String?
+        comment: String?,
+        tagIds: List<Int>? = null
     ): Transaction? {
         val sql = """
             WITH updated AS (
@@ -268,15 +327,16 @@ class TransactionDao(private val ds: DataSource) {
                 u.subcategory_id,
                 s.name AS sub_category,
                 u.comment,
-                (SELECT count(*) FROM transaction_items ti WHERE ti.transaction_id = u.id) AS items_count
+                (SELECT count(*) FROM transaction_items ti WHERE ti.transaction_id = u.id) AS items_count,
+                ${tagColumns("u.id")}
             FROM updated u
             LEFT JOIN persons p ON p.id = u.person_id
             JOIN categories c ON c.id = u.category_id
             LEFT JOIN subcategories s ON s.id = u.subcategory_id
         """.trimIndent()
 
-        ds.connection.use { conn ->
-            conn.prepareStatement(sql).use { stmt ->
+        return inTransaction { conn ->
+            val updated = conn.prepareStatement(sql).use { stmt ->
                 stmt.setDate(1, java.sql.Date.valueOf(transactionDate))
                 stmt.setBigDecimal(2, amount)
                 stmt.setString(3, currency)
@@ -287,8 +347,14 @@ class TransactionDao(private val ds: DataSource) {
                 stmt.setInt(8, id)
 
                 stmt.executeQuery().use { rs ->
-                    return if (rs.next()) mapRow(rs) else null
+                    if (rs.next()) mapRow(rs) else null
                 }
+            }
+            if (updated == null || tagIds == null) {
+                updated
+            } else {
+                replaceTags(conn, id, tagIds)
+                findByIdOn(conn, id)
             }
         }
     }
@@ -318,7 +384,9 @@ class TransactionDao(private val ds: DataSource) {
             subcategoryId = subcategoryId,
             subCategory = subCategory,
             comment = comment,
-            itemsCount = rs.getInt("items_count")
+            itemsCount = rs.getInt("items_count"),
+            tags = (rs.getArray("tags").array as Array<*>).map { it as String },
+            tagIds = (rs.getArray("tag_ids").array as Array<*>).map { (it as Number).toInt() }
         )
     }
 }

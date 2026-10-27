@@ -31,7 +31,8 @@ class TransactionsController(private val service: TransactionService) {
         category = transaction.category,
         subCategory = transaction.subCategory,
         comment = transaction.comment,
-        itemsCount = transaction.itemsCount
+        itemsCount = transaction.itemsCount,
+        tags = transaction.tags
     )
 
     private fun toFormDto(transaction: model.Transaction): TransactionFormDto = TransactionFormDto(
@@ -42,7 +43,8 @@ class TransactionsController(private val service: TransactionService) {
         personId = transaction.personId,
         categoryId = transaction.categoryId,
         subcategoryId = transaction.subcategoryId,
-        comment = transaction.comment
+        comment = transaction.comment,
+        tagIds = transaction.tagIds
     )
 
     // Parses the inclusive ?from=YYYY-MM-DD&to=YYYY-MM-DD range; null when either is missing or malformed.

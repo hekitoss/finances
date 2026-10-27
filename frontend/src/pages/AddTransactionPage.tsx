@@ -2,6 +2,7 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { createCategory, createSubcategory, createTransaction, fetchDictionaries } from "../api";
 import type { DictionariesResponse, TransactionCreateRequest } from "../types";
+import TagPicker from "../components/TagPicker";
 
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
@@ -50,7 +51,8 @@ export default function AddTransactionPage() {
     personId: "",
     categoryId: "",
     subcategoryId: "",
-    comment: ""
+    comment: "",
+    tagIds: [] as number[]
   });
 
   async function loadDictionaries() {
@@ -142,7 +144,8 @@ export default function AddTransactionPage() {
       personId: form.personId ? Number(form.personId) : null,
       categoryId: Number(form.categoryId),
       subcategoryId: form.subcategoryId ? Number(form.subcategoryId) : null,
-      comment: emptyToNull(form.comment)
+      comment: emptyToNull(form.comment),
+      tagIds: form.tagIds
     };
 
     try {
@@ -355,6 +358,14 @@ export default function AddTransactionPage() {
               required
             />
           </label>
+
+          <TagPicker
+            tags={dictionaries?.tags ?? []}
+            selectedIds={form.tagIds}
+            onChange={(tagIds) => setForm((prev) => ({ ...prev, tagIds }))}
+            onTagCreated={loadDictionaries}
+            onError={setError}
+          />
 
           <label className="form-grid-full">
             <span>Comment</span>

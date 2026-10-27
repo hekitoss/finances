@@ -15,6 +15,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import model.Category
 import model.Subcategory
+import model.Tag
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -43,10 +44,11 @@ class GeminiExpenseParser(
         text: String,
         categories: List<Category>,
         subcategories: List<Subcategory>,
+        tags: List<Tag>,
         today: LocalDate
     ): ParsedExpense {
         val raw = interact(
-            systemInstruction = ExpensePrompt.systemPrompt(categories, subcategories, today),
+            systemInstruction = ExpensePrompt.systemPrompt(categories, subcategories, tags, today),
             input = JsonPrimitive(text),
             schema = expenseSchema,
             thinkingLevel = "minimal"
@@ -59,6 +61,7 @@ class GeminiExpenseParser(
         caption: String?,
         categories: List<Category>,
         subcategories: List<Subcategory>,
+        tags: List<Tag>,
         today: LocalDate
     ): ParsedReceipt {
         val input = buildJsonArray {
@@ -74,7 +77,7 @@ class GeminiExpenseParser(
         }
 
         val raw = interact(
-            systemInstruction = ExpensePrompt.receiptSystemPrompt(categories, subcategories, today),
+            systemInstruction = ExpensePrompt.receiptSystemPrompt(categories, subcategories, tags, today),
             input = input,
             schema = receiptSchema,
             thinkingLevel = "low"
