@@ -19,6 +19,9 @@ interface ColumnFilterDropdownProps {
   filter: ColumnFilter;
   /** Exactly one option is always selected (radio buttons, no Reset); the badge shows the chosen value. */
   single?: boolean;
+  /** Adds a button under the options that closes the popover and calls this (e.g. to add a new tag). */
+  onCreate?: () => void;
+  createLabel?: string;
 }
 
 interface PopoverPosition {
@@ -28,7 +31,13 @@ interface PopoverPosition {
 
 const POPOVER_WIDTH = 220;
 
-export default function ColumnFilterDropdown({ label, filter, single = false }: ColumnFilterDropdownProps) {
+export default function ColumnFilterDropdown({
+  label,
+  filter,
+  single = false,
+  onCreate,
+  createLabel = "+ New"
+}: ColumnFilterDropdownProps) {
   const [position, setPosition] = useState<PopoverPosition | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -140,6 +149,18 @@ export default function ColumnFilterDropdown({ label, filter, single = false }: 
           {isActive && !single && (
             <button type="button" className="column-filter-reset" onClick={() => filter.onChange(filter.allByDefault ? filter.options : [])}>
               Reset
+            </button>
+          )}
+          {onCreate && (
+            <button
+              type="button"
+              className="column-filter-reset"
+              onClick={() => {
+                setPosition(null);
+                onCreate();
+              }}
+            >
+              {createLabel}
             </button>
           )}
         </div>

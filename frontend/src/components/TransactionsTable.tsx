@@ -1,8 +1,9 @@
-import { Fragment, useState } from "react";
-import { Link } from "react-router-dom";
-import type { Transaction, TransactionItem } from "../types";
+import { Fragment, useEffect, useState } from "react";
+import type { DictionariesResponse, Transaction, TransactionItem } from "../types";
 import { deleteTransaction, fetchTransactionItems } from "../api";
 import ColumnFilterDropdown, { isFilterActive, type ColumnFilter } from "./ColumnFilterDropdown";
+import TransactionEditForm from "./TransactionEditForm";
+import TransactionEditRow from "./TransactionEditRow";
 
 export interface TransactionsTableFilters {
   category: ColumnFilter;
@@ -21,6 +22,27 @@ interface TransactionsTableProps {
   filters?: TransactionsTableFilters;
   /** Show the Edit/Delete actions on each row. */
   editMode?: boolean;
+  /** Used by the inline editor; loaded by the page when edit mode is turned on. */
+  dictionaries?: DictionariesResponse | null;
+  onDictionariesChanged?: () => Promise<unknown>;
+  onTransactionUpdated?: () => void;
+}
+
+// Must match the breakpoint in styles.css where the table is swapped for cards.
+const NARROW_QUERY = "(max-width: 640px)";
+
+/** Only one of the table and the card list is visible, so the editor is mounted in that one only. */
+function useIsNarrow(): boolean {
+  const [isNarrow, setIsNarrow] = useState(() => window.matchMedia(NARROW_QUERY).matches);
+
+  useEffect(() => {
+    const media = window.matchMedia(NARROW_QUERY);
+    const handleChange = () => setIsNarrow(media.matches);
+    media.addEventListener("change", handleChange);
+    return () => media.removeEventListener("change", handleChange);
+  }, []);
+
+  return isNarrow;
 }
 
 type ItemsState =
@@ -53,12 +75,22 @@ function amountClass(amount: string): string {
   return Number.parseFloat(amount) < 0 ? "amount-negative" : "amount-positive";
 }
 
-function RowActions({ id, onDeleted }: { id: number; onDeleted: (id: number) => void }) {
+function RowActions({
+  id,
+  editing,
+  onEdit,
+  onDeleted
+}: {
+  id: number;
+  editing: boolean;
+  onEdit: () => void;
+  onDeleted: (id: number) => void;
+}) {
   return (
     <div className="table-actions">
-      <Link to={`/transactions/${id}/edit`} className="edit-btn">
-        Edit
-      </Link>
+      <button type="button" onClick={onEdit} className="edit-btn" aria-pressed={editing}>
+        {editing ? "Close" : "Edit"}
+      </button>
       <button onClick={() => handleDelete(id, onDeleted)} className="delete-btn">
         Delete
       </button>
@@ -128,10 +160,41 @@ function ReceiptItems({ state, currency }: { state: ItemsState | undefined; curr
   );
 }
 
-export default function TransactionsTable({ transactions, onTransactionDeleted, filters, editMode = false }: TransactionsTableProps) {
+export default function TransactionsTable({
+  transactions,
+  onTransactionDeleted,
+  filters,
+  editMode = false,
+  dictionaries = null,
+  onDictionariesChanged = async () => {},
+  onTransactionUpdated = () => {}
+}: TransactionsTableProps) {
   const columnCount = editMode ? 8 : 7;
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [itemsById, setItemsById] = useState<Record<number, ItemsState>>({});
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const isNarrow = useIsNarrow();
+
+  useEffect(() => {
+    if (!editMode) {
+      setEditingId(null);
+    }
+  }, [editMode]);
+
+  function toggleEditing(id: number) {
+    setEditingId((prev) => (prev === id ? null : id));
+  }
+
+  const editorProps = (id: number) => ({
+    transactionId: id,
+    dictionaries,
+    onDictionariesChanged,
+    onSaved: () => {
+      setEditingId(null);
+      onTransactionUpdated();
+    },
+    onCancel: () => setEditingId(null)
+  });
 
   async function loadItems(id: number) {
     setItemsById((prev) => ({ ...prev, [id]: { status: "loading" } }));
@@ -198,8 +261,8 @@ export default function TransactionsTable({ transactions, onTransactionDeleted, 
               <FilterHeader label="Subcategory" filter={filters?.subcategory} />
               <FilterHeader label="Person" filter={filters?.person} />
               <FilterHeader label="Amount" filter={filters?.currency} single className="table-amount" />
-              <th>Comment</th>
               <FilterHeader label="Tags" filter={filters?.tags} />
+              <th>Comment</th>
               {editMode && <th>Action</th>}
             </tr>
           </thead>
@@ -213,31 +276,41 @@ export default function TransactionsTable({ transactions, onTransactionDeleted, 
             ) : (
               transactions.map((transaction) => {
                 const isExpanded = expandedIds.has(transaction.id);
+                const isEditing = editMode && !isNarrow && editingId === transaction.id;
                 return (
                   <Fragment key={transaction.id}>
-                    <tr className={isExpanded ? "row-expanded" : undefined}>
-                      <td className="table-date">{transaction.transactionDate}</td>
-                      <td>{transaction.category}</td>
-                      <td>{transaction.subCategory ?? "-"}</td>
-                      <td>{transaction.person ?? "-"}</td>
-                      <td className="table-amount">{formatAmount(transaction.amount, transaction.currency)}</td>
-                      <td>
-                        {transaction.comment ?? "-"}
-                        {transaction.itemsCount > 0 && (
-                          <ItemsToggle
-                            count={transaction.itemsCount}
-                            expanded={isExpanded}
-                            onToggle={() => toggleItems(transaction.id)}
-                          />
-                        )}
-                      </td>
-                      <td>{transaction.tags.length > 0 ? <TagChips tags={transaction.tags} /> : "-"}</td>
-                      {editMode && (
+                    {isEditing ? (
+                      <TransactionEditRow columnCount={columnCount} {...editorProps(transaction.id)} />
+                    ) : (
+                      <tr className={isExpanded ? "row-expanded" : undefined}>
+                        <td className="table-date">{transaction.transactionDate}</td>
+                        <td>{transaction.category}</td>
+                        <td>{transaction.subCategory ?? "-"}</td>
+                        <td>{transaction.person ?? "-"}</td>
+                        <td className="table-amount">{formatAmount(transaction.amount, transaction.currency)}</td>
+                        <td>{transaction.tags.length > 0 ? <TagChips tags={transaction.tags} /> : "-"}</td>
                         <td>
-                          <RowActions id={transaction.id} onDeleted={onTransactionDeleted} />
+                          {transaction.comment ?? "-"}
+                          {transaction.itemsCount > 0 && (
+                            <ItemsToggle
+                              count={transaction.itemsCount}
+                              expanded={isExpanded}
+                              onToggle={() => toggleItems(transaction.id)}
+                            />
+                          )}
                         </td>
-                      )}
-                    </tr>
+                        {editMode && (
+                          <td>
+                            <RowActions
+                              id={transaction.id}
+                              editing={false}
+                              onEdit={() => toggleEditing(transaction.id)}
+                              onDeleted={onTransactionDeleted}
+                            />
+                          </td>
+                        )}
+                      </tr>
+                    )}
                     {isExpanded && (
                       <tr className="receipt-row">
                         <td colSpan={columnCount}>
@@ -260,8 +333,9 @@ export default function TransactionsTable({ transactions, onTransactionDeleted, 
         ) : (
           transactions.map((transaction) => {
             const isExpanded = expandedIds.has(transaction.id);
+            const isEditing = editMode && isNarrow && editingId === transaction.id;
             return (
-              <li key={transaction.id} className="transaction-card">
+              <li key={transaction.id} className={isEditing ? "transaction-card transaction-card-editing" : "transaction-card"}>
                 <div className="transaction-card-top">
                   <div className="transaction-card-category">
                     {transaction.category}
@@ -274,6 +348,11 @@ export default function TransactionsTable({ transactions, onTransactionDeleted, 
                 <div className="transaction-card-meta">
                   {[transaction.transactionDate, transaction.person].filter(Boolean).join(" · ")}
                 </div>
+                {transaction.tags.length > 0 && (
+                  <div className="transaction-card-tags">
+                    <TagChips tags={transaction.tags} />
+                  </div>
+                )}
                 {(transaction.comment || transaction.itemsCount > 0) && (
                   <div className="transaction-card-comment">
                     {transaction.comment}
@@ -286,17 +365,20 @@ export default function TransactionsTable({ transactions, onTransactionDeleted, 
                     )}
                   </div>
                 )}
-                {transaction.tags.length > 0 && (
-                  <div className="transaction-card-tags">
-                    <TagChips tags={transaction.tags} />
-                  </div>
-                )}
                 {isExpanded && (
                   <div className="transaction-card-items">
                     <ReceiptItems state={itemsById[transaction.id]} currency={transaction.currency} />
                   </div>
                 )}
-                {editMode && <RowActions id={transaction.id} onDeleted={onTransactionDeleted} />}
+                {editMode && (
+                  <RowActions
+                    id={transaction.id}
+                    editing={isEditing}
+                    onEdit={() => toggleEditing(transaction.id)}
+                    onDeleted={onTransactionDeleted}
+                  />
+                )}
+                {isEditing && <div className="transaction-card-edit"><TransactionEditForm {...editorProps(transaction.id)} /></div>}
               </li>
             );
           })

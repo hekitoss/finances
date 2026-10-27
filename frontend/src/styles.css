@@ -416,6 +416,18 @@ a {
   box-shadow: 0 0 0 3px var(--focus);
 }
 
+.toggle-label {
+  display: inline-grid;
+}
+
+.toggle-label > span {
+  grid-area: 1 / 1;
+}
+
+.toggle-label > span[aria-hidden="true"] {
+  visibility: hidden;
+}
+
 .button-refresh[aria-pressed="true"],
 .button-refresh[aria-pressed="true"]:hover:not(:disabled) {
   background: var(--primary);
@@ -1090,6 +1102,174 @@ tbody tr:not(.receipt-row):hover td {
 .form-actions button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Secondary actions next to the submit button (e.g. Cancel in the inline editor). */
+.form-actions .button-link-secondary,
+.form-actions .button-link-secondary:hover:not(:disabled) {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  opacity: 1;
+}
+
+.form-actions .button-link-secondary:hover:not(:disabled) {
+  background: var(--surface-muted);
+  border-color: var(--border-strong);
+}
+
+/* Inline transaction editor on the dashboard */
+.edit-btn[aria-pressed="true"] {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.grid-two-columns.grid-editing {
+  grid-template-columns: 1fr;
+}
+
+.grid-two-columns.grid-editing > * {
+  min-width: 0;
+}
+
+/* Desktop: the row being edited turns its cells into compact fields. */
+.edit-row > td,
+.edit-row:hover > td {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  background: var(--surface-muted);
+}
+
+/* Scoped to the cell fields, so the checkboxes in the tags popover (rendered inside the row) keep their look. */
+.edit-row td > input,
+.edit-row td > select,
+.edit-amount input {
+  width: 100%;
+  min-width: 90px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 8px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background-color: var(--surface);
+}
+
+.edit-row td > input:focus,
+.edit-row td > select:focus,
+.edit-amount input:focus {
+  outline: none;
+  border-color: var(--text-subtle);
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+/* The comment gets most of the spare width and grows downwards with its text. */
+.edit-row .edit-comment-cell {
+  width: 30%;
+}
+
+.edit-row td > textarea {
+  display: block;
+  width: 100%;
+  min-width: 220px;
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text);
+  background-color: var(--surface);
+  resize: none;
+  overflow: hidden;
+}
+
+.edit-row td > textarea:focus {
+  outline: none;
+  border-color: var(--text-subtle);
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+.edit-row input[type="date"] {
+  min-width: 130px;
+}
+
+.edit-row td > select:disabled {
+  opacity: 0.5;
+}
+
+.edit-amount {
+  display: flex;
+  gap: 4px;
+}
+
+.edit-amount input {
+  min-width: 80px;
+  text-align: right;
+}
+
+.edit-row .edit-amount .edit-currency {
+  width: 52px;
+  min-width: 52px;
+  flex-shrink: 0;
+  text-align: left;
+}
+
+/* The tags dropdown looks like the other fields and shows the chosen names, cut off when long. */
+.edit-row .column-filter-button {
+  height: 32px;
+  max-width: 160px;
+  margin: 0;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.edit-row .column-filter-count {
+  display: none;
+}
+
+.edit-btn.edit-save {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.edit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.edit-error-row > td {
+  padding-top: 0;
+}
+
+.edit-error-row .error-box,
+.inline-edit-form .error-box {
+  margin-bottom: 0;
+}
+
+.transaction-card-edit {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+/* Phones: 16px inputs keep iOS Safari from zooming in on focus. */
+.transaction-card-edit .form-grid input,
+.transaction-card-edit .form-grid select,
+.transaction-card-edit .form-grid textarea {
+  font-size: 16px;
+}
+
+.transaction-card-edit .form-actions button {
+  flex: 1;
 }
 
 @media (max-width: 980px) {

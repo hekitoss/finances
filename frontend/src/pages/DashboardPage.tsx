@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { exportTransactionsExcel, fetchTransactions, type DateRange } from "../api";
-import type { Transaction } from "../types";
+import { exportTransactionsExcel, fetchDictionaries, fetchTransactions, type DateRange } from "../api";
+import type { DictionariesResponse, Transaction } from "../types";
 import TransactionsTable from "../components/TransactionsTable";
 import CategoryPieChart from "../components/CategoryPieChart";
 import DateRangePicker, { monthRange } from "../components/DateRangePicker";
@@ -27,7 +27,7 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-// Filters are kept in localStorage so they survive going to the edit/add pages and back.
+// Filters are kept in localStorage so they survive going to the add page and back.
 function loadSavedFilters(): SavedFilters {
   const defaults: SavedFilters = { range: DEFAULT_RANGE, currency: "EUR", excludedCategories: [], excludedSubcategories: [], persons: [], tags: [] };
   try {
@@ -73,6 +73,7 @@ export default function DashboardPage() {
   const [savedFilters] = useState(loadSavedFilters);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [editMode, setEditMode] = useState(false);
+  const [dictionaries, setDictionaries] = useState<DictionariesResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [exporting, setExporting] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
@@ -116,6 +117,23 @@ export default function DashboardPage() {
   useEffect(() => {
     void loadTransactions(selectedRange);
   }, [selectedRange]);
+
+  async function loadDictionaries() {
+    const data = await fetchDictionaries();
+    setDictionaries(data);
+    return data;
+  }
+
+  // The inline editor needs categories, persons and tags; they are loaded once, on the first switch to edit mode.
+  useEffect(() => {
+    if (!editMode || dictionaries) {
+      return;
+    }
+
+    loadDictionaries().catch((err) => {
+      setError(err instanceof Error ? err.message : "Failed to load dictionaries");
+    });
+  }, [editMode, dictionaries]);
 
   const handleTransactionDeleted = (id: number) => {
     setTransactions((prev) => prev.filter((t) => t.id !== id));
@@ -260,7 +278,11 @@ export default function DashboardPage() {
               className="button-refresh"
               aria-pressed={editMode}
             >
-              {editMode ? "Done" : "Edit rows"}
+              {/* Both labels share one grid cell, so the button keeps the width of the longer one. */}
+              <span className="toggle-label">
+                <span aria-hidden={editMode}>Edit rows</span>
+                <span aria-hidden={!editMode}>Done</span>
+              </span>
             </button>
             <button type="button" onClick={() => void handleExport()} className="button-export" disabled={exporting || loading}>
               {exporting ? "Exporting..." : "Export Excel"}
@@ -290,11 +312,15 @@ export default function DashboardPage() {
         </article>
       </section>
 
-      <section className="grid-two-columns">
+      {/* In edit mode the chart is hidden and the table takes the full width, so a row being edited fits its fields. */}
+      <section className={editMode ? "grid-two-columns grid-editing" : "grid-two-columns"}>
         <TransactionsTable
           transactions={filteredTransactions}
           onTransactionDeleted={handleTransactionDeleted}
           editMode={editMode}
+          dictionaries={dictionaries}
+          onDictionariesChanged={loadDictionaries}
+          onTransactionUpdated={() => void loadTransactions()}
           filters={{
             category: {
               selected: selectedCategories,
@@ -324,11 +350,13 @@ export default function DashboardPage() {
           }}
         />
         {/* The chart shows only the active categories; hidden ones stay in the legend so they can be re-added. */}
-        <CategoryPieChart
-          transactions={filteredTransactions}
-          allTransactions={personTransactions}
-          onCategoryClick={handleChartCategoryClick}
-        />
+        {!editMode && (
+          <CategoryPieChart
+            transactions={filteredTransactions}
+            allTransactions={personTransactions}
+            onCategoryClick={handleChartCategoryClick}
+          />
+        )}
       </section>
     </main>
   );
