@@ -1032,6 +1032,53 @@ tbody tr:not(.receipt-row):hover td {
   font-size: 13px;
 }
 
+.pie-tooltip {
+  min-width: 180px;
+  max-width: 280px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.pie-tooltip-header,
+.pie-tooltip-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pie-tooltip-header {
+  font-weight: 600;
+}
+
+.pie-tooltip-list {
+  margin: 6px 0 0;
+  padding: 6px 0 0;
+  list-style: none;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.pie-tooltip-list li + li {
+  margin-top: 2px;
+}
+
+.pie-tooltip-muted {
+  color: var(--text-subtle);
+  font-style: italic;
+}
+
+.pie-tooltip-share {
+  display: inline-block;
+  min-width: 36px;
+  margin-left: 8px;
+  text-align: right;
+  color: var(--text-subtle);
+}
+
 .chart-container .recharts-sector:focus,
 .chart-container .recharts-surface:focus {
   outline: none;
