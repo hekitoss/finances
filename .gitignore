@@ -27,3 +27,4 @@ Thumbs.db
 /backup/
 /receipts/
 /db-script/console.sql
+/bot-settings.properties
