@@ -8,7 +8,7 @@ import DateRangePicker, { monthRange } from "../components/DateRangePicker";
 
 const currentDate = new Date();
 const DEFAULT_RANGE = monthRange(currentDate.getFullYear(), currentDate.getMonth());
-const CURRENCIES = ["EUR", "RUB"] as const;
+const CURRENCIES = ["EUR", "RUB", "USD", "JPY"] as const;
 type Currency = (typeof CURRENCIES)[number];
 const FILTERS_STORAGE_KEY = "dashboard-filters";
 

@@ -47,11 +47,14 @@ class TelegramBot(
     private val parser: ExpenseParser,
     private val transactionService: TransactionService,
     private val dictionaryService: DictionaryService,
-    private val receiptStorage: ReceiptStorage = ReceiptStorage()
+    private val receiptStorage: ReceiptStorage = ReceiptStorage(),
+    private val settings: BotSettings = BotSettings()
 ) {
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
     private val json = Json { ignoreUnknownKeys = true }
     private val baseUrl = "https://api.telegram.org/bot$token"
+    /** Currencies offered as buttons in /currency; any other 3-letter code can be typed as "/currency GBP". */
+    private val currencyChoices = listOf("EUR", "RUB", "USD", "JPY")
     private val supportedReceiptTypes = setOf("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf")
     /** Error messages whose retry button was already pressed, so a double tap doesn't process the message twice. */
     private val usedRetries = java.util.Collections.newSetFromMap(object : LinkedHashMap<String, Boolean>() {
@@ -59,10 +62,35 @@ class TelegramBot(
     })
 
     fun start() {
+        registerCommands()
         val thread = Thread(::pollLoop, "telegram-bot")
         thread.isDaemon = true
         thread.start()
         println("Telegram bot started (allowed users: ${allowedUsers.keys})")
+    }
+
+    /**
+     * Fills Telegram's "Menu" button with the bot's commands. Having /settings there also makes Telegram show a
+     * "Settings" item in the bot's profile menu. A failure only loses the menu, so it is logged and ignored.
+     */
+    private fun registerCommands() {
+        val commands = listOf(
+            "settings" to "Настройки: валюта по умолчанию",
+            "categories" to "Список категорий",
+            "tags" to "Список тэгов",
+            "help" to "Как пользоваться ботом"
+        )
+        try {
+            call("setMyCommands", buildJsonObject {
+                put("commands", buildJsonArray {
+                    commands.forEach { (command, description) ->
+                        add(buildJsonObject { put("command", command); put("description", description) })
+                    }
+                })
+            })
+        } catch (e: Exception) {
+            System.err.println("Failed to register bot commands: ${e.message}")
+        }
     }
 
     private fun pollLoop() {
@@ -115,7 +143,7 @@ class TelegramBot(
         }
 
         if (message["photo"] != null || message["document"] != null) {
-            handleReceipt(chatId, messageId, message, personName)
+            handleReceipt(chatId, messageId, message, personName, userId)
             return
         }
 
@@ -134,6 +162,10 @@ class TelegramBot(
                 sendMessage(chatId, tagsText())
                 return
             }
+            text.startsWith("/currency") || text.startsWith("/settings") -> {
+                handleCurrencyCommand(chatId, userId, text.substringAfter(' ', "").trim())
+                return
+            }
         }
 
         val categories = dictionaryService.getAllCategories()
@@ -141,7 +173,7 @@ class TelegramBot(
         val tags = dictionaryService.getAllTags()
 
         val parsed = try {
-            parser.parse(text, categories, subcategories, tags)
+            parser.parse(text, categories, subcategories, tags, settings.defaultCurrency(userId))
         } catch (e: Exception) {
             System.err.println("AI request failed: ${e.message}")
             sendError(chatId, messageId, "⚠️ Не удалось обработать сообщение: ${e.message}")
@@ -182,7 +214,7 @@ class TelegramBot(
         )
     }
 
-    private fun handleReceipt(chatId: Long, messageId: Int, message: JsonObject, personName: String) {
+    private fun handleReceipt(chatId: Long, messageId: Int, message: JsonObject, personName: String, userId: Long) {
         val caption = message["caption"]?.jsonPrimitive?.contentOrNull?.trim()
 
         val (fileId, mimeType) = message["photo"]?.jsonArray?.lastOrNull()?.jsonObject?.let { largest ->
@@ -212,7 +244,7 @@ class TelegramBot(
         }
 
         val receipt = try {
-            parser.parseReceipt(Attachment(bytes, mimeType), caption, categories, subcategories, tags)
+            parser.parseReceipt(Attachment(bytes, mimeType), caption, categories, subcategories, tags, settings.defaultCurrency(userId))
         } catch (e: Exception) {
             System.err.println("Receipt parsing failed: ${e.message}")
             saveReceiptFile { receiptStorage.saveUnmatched(bytes, mimeType) }
@@ -309,6 +341,27 @@ class TelegramBot(
         return response.body()
     }
 
+    /** "/currency" shows the current default with buttons to change it; "/currency GBP" sets any ISO code directly. */
+    private fun handleCurrencyCommand(chatId: Long, userId: Long, argument: String) {
+        if (argument.isEmpty()) {
+            val current = settings.defaultCurrency(userId)
+            sendMessage(
+                chatId,
+                "💱 Валюта по умолчанию: $current\nОна ставится, если в сообщении или чеке валюта не указана. " +
+                    "Выбери другую или напиши, например, «/currency GBP».",
+                replyMarkup = inlineButtons(currencyChoices.map { (if (it == current) "✓ $it" else it) to "cur:$it" })
+            )
+            return
+        }
+        val currency = argument.uppercase()
+        if (!currency.matches(Regex("[A-Z]{3}"))) {
+            sendMessage(chatId, "Нужен трёхбуквенный код валюты, например «/currency RUB».")
+            return
+        }
+        settings.setDefaultCurrency(userId, currency)
+        sendMessage(chatId, "💱 Теперь по умолчанию $currency")
+    }
+
     private fun findPersonId(personName: String): Int? =
         dictionaryService.getAllPersons().firstOrNull { it.name.equals(personName, ignoreCase = true) }?.id
 
@@ -332,6 +385,20 @@ class TelegramBot(
         })
     }
 
+    /** One row of buttons, each given as text to callback data. */
+    private fun inlineButtons(buttons: List<Pair<String, String>>): JsonObject = buildJsonObject {
+        put("inline_keyboard", buildJsonArray {
+            add(buildJsonArray {
+                buttons.forEach { (text, callbackData) ->
+                    add(buildJsonObject {
+                        put("text", text)
+                        put("callback_data", callbackData)
+                    })
+                }
+            })
+        })
+    }
+
     private fun handleCallback(callback: JsonObject) {
         val callbackId = callback["id"]!!.jsonPrimitive.content
         val userId = callback["from"]!!.jsonObject["id"]!!.jsonPrimitive.long
@@ -345,6 +412,20 @@ class TelegramBot(
 
         if (data == "retry") {
             handleRetry(callbackId, message)
+            return
+        }
+
+        if (data.startsWith("cur:")) {
+            val currency = data.removePrefix("cur:")
+            settings.setDefaultCurrency(userId, currency)
+            answerCallback(callbackId, "По умолчанию $currency")
+            if (message != null) {
+                call("editMessageText", buildJsonObject {
+                    put("chat_id", message["chat"]!!.jsonObject["id"]!!.jsonPrimitive.long)
+                    put("message_id", message["message_id"]!!.jsonPrimitive.int)
+                    put("text", "💱 Теперь по умолчанию $currency")
+                })
+            }
             return
         }
 
@@ -437,6 +518,7 @@ class TelegramBot(
 
         /categories — список категорий
         /tags — список тэгов
+        /settings или /currency — валюта по умолчанию (в самом сообщении можно указать любую: «500 руб такси»)
     """.trimIndent()
 
     private fun categoriesText(): String {

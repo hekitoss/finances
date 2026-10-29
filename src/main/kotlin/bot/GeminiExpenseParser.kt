@@ -45,10 +45,11 @@ class GeminiExpenseParser(
         categories: List<Category>,
         subcategories: List<Subcategory>,
         tags: List<Tag>,
+        defaultCurrency: String,
         today: LocalDate
     ): ParsedExpense {
         val raw = interact(
-            systemInstruction = ExpensePrompt.systemPrompt(categories, subcategories, tags, today),
+            systemInstruction = ExpensePrompt.systemPrompt(categories, subcategories, tags, defaultCurrency, today),
             input = JsonPrimitive(text),
             schema = expenseSchema,
             thinkingLevel = "minimal"
@@ -62,6 +63,7 @@ class GeminiExpenseParser(
         categories: List<Category>,
         subcategories: List<Subcategory>,
         tags: List<Tag>,
+        defaultCurrency: String,
         today: LocalDate
     ): ParsedReceipt {
         val input = buildJsonArray {
@@ -77,7 +79,7 @@ class GeminiExpenseParser(
         }
 
         val raw = interact(
-            systemInstruction = ExpensePrompt.receiptSystemPrompt(categories, subcategories, tags, today),
+            systemInstruction = ExpensePrompt.receiptSystemPrompt(categories, subcategories, tags, defaultCurrency, today),
             input = input,
             schema = receiptSchema,
             thinkingLevel = "low"

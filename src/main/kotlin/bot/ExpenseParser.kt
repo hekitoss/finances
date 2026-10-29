@@ -40,6 +40,9 @@ data class ParsedReceipt(
     val items: List<ReceiptItem>
 )
 
+/** Currency used when a message or receipt doesn't name one and the user hasn't picked another via /currency. */
+const val DEFAULT_CURRENCY = "EUR"
+
 /** A file sent to the bot (receipt photo or PDF). */
 class Attachment(val bytes: ByteArray, val mimeType: String)
 
@@ -51,6 +54,7 @@ interface ExpenseParser {
         categories: List<Category>,
         subcategories: List<Subcategory>,
         tags: List<Tag>,
+        defaultCurrency: String = DEFAULT_CURRENCY,
         today: LocalDate = LocalDate.now()
     ): ParsedExpense
 
@@ -61,6 +65,7 @@ interface ExpenseParser {
         categories: List<Category>,
         subcategories: List<Subcategory>,
         tags: List<Tag>,
+        defaultCurrency: String = DEFAULT_CURRENCY,
         today: LocalDate = LocalDate.now()
     ): ParsedReceipt
 
@@ -103,7 +108,7 @@ object ExpensePrompt {
             (e.g. "#подарок" or "это подарок"), always attach it.
         """.trimIndent()
 
-    fun systemPrompt(categories: List<Category>, subcategories: List<Subcategory>, tags: List<Tag>, today: LocalDate): String =
+    fun systemPrompt(categories: List<Category>, subcategories: List<Subcategory>, tags: List<Tag>, defaultCurrency: String, today: LocalDate): String =
         """
             You turn short messages from a personal finance Telegram bot into a single transaction record.
             The user writes an amount and what the money was spent on (or received for), usually in Russian,
@@ -120,14 +125,14 @@ object ExpensePrompt {
 
             Rules:
             - amount is always a positive number; set isIncome=true only for money received (salary, refunds, payments to the user).
-            - currency is a 3-letter ISO code; default to EUR unless the message says otherwise (₽/руб → RUB, $ → USD).
+            - currency is a 3-letter ISO code; default to $defaultCurrency unless the message says otherwise (€ → EUR, ₽/руб → RUB, $ → USD, ¥/йен/иен → JPY).
             - subcategoryId must belong to the chosen categoryId, or be null if nothing fits well.
             - comment is a short human-readable description of the purchase, in the user's language.
             - If the message has no recognizable amount or is not about money at all, set understood=false
               (fill other fields with any valid placeholder values).
         """.trimIndent()
 
-    fun receiptSystemPrompt(categories: List<Category>, subcategories: List<Subcategory>, tags: List<Tag>, today: LocalDate): String =
+    fun receiptSystemPrompt(categories: List<Category>, subcategories: List<Subcategory>, tags: List<Tag>, defaultCurrency: String, today: LocalDate): String =
         """
             You read a shop receipt (photo or PDF) for a personal finance app and split it into purchased line items.
             The user may add a caption with hints (e.g. "это для работы", "вчера") — take it into account.
@@ -153,7 +158,7 @@ object ExpensePrompt {
             - The sum of all item amounts must equal total, the final amount paid shown on the receipt.
             - description is a short readable product name in Russian, keeping the brand if useful
               (e.g. "Молоко 3.5% (Weihenstephan)").
-            - store is the shop name. currency is a 3-letter ISO code (EUR if not shown).
+            - store is the shop name. currency is a 3-letter ISO code ($defaultCurrency if not shown).
             - subcategoryId must belong to the chosen categoryId, or be null if nothing fits well.
             - If the file is not a receipt or is unreadable, set understood=false and return an empty items list.
         """.trimIndent()

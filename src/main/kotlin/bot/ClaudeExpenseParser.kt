@@ -36,10 +36,11 @@ class ClaudeExpenseParser(
         categories: List<Category>,
         subcategories: List<Subcategory>,
         tags: List<Tag>,
+        defaultCurrency: String,
         today: LocalDate
     ): ParsedExpense {
         val raw = request(
-            system = ExpensePrompt.systemPrompt(categories, subcategories, tags, today),
+            system = ExpensePrompt.systemPrompt(categories, subcategories, tags, defaultCurrency, today),
             content = listOf(textBlock(text)),
             schema = expenseSchema,
             effort = OutputConfig.Effort.LOW
@@ -53,6 +54,7 @@ class ClaudeExpenseParser(
         categories: List<Category>,
         subcategories: List<Subcategory>,
         tags: List<Tag>,
+        defaultCurrency: String,
         today: LocalDate
     ): ParsedReceipt {
         val data = Base64.getEncoder().encodeToString(file.bytes)
@@ -76,7 +78,7 @@ class ClaudeExpenseParser(
         }
 
         val raw = request(
-            system = ExpensePrompt.receiptSystemPrompt(categories, subcategories, tags, today),
+            system = ExpensePrompt.receiptSystemPrompt(categories, subcategories, tags, defaultCurrency, today),
             content = listOf(fileBlock, textBlock(caption?.takeIf { it.isNotBlank() } ?: "Разбери этот чек.")),
             schema = receiptSchema,
             effort = OutputConfig.Effort.MEDIUM
