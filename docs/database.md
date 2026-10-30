@@ -30,6 +30,7 @@ erDiagram
         date transaction_date
         numeric amount
         varchar currency
+        numeric amount_eur
         int person_id FK
         int category_id FK
         int subcategory_id FK
@@ -57,6 +58,7 @@ erDiagram
 | `transaction_date` | `DATE NOT NULL` | Дата операции |
 | `amount` | `NUMERIC(12,2) NOT NULL` | Сумма: расход `< 0`, доход `> 0` |
 | `currency` | `VARCHAR(3) NOT NULL`, по умолчанию `EUR` | Код валюты ISO 4217 |
+| `amount_eur` | `NUMERIC(12,2)` | Сумма в EUR (базовая валюта) для режима «All» на дашборде. Для EUR равна `amount`, для остальных считается по курсу на дату операции (fawazahmed0 currency-api) при создании и правке. Пустая, пока курс не получен: сервер дозаполняет такие строки при старте и раз в час |
 | `person_id` | `INTEGER → persons` | Кто потратил (может быть пустым) |
 | `category_id` | `INTEGER NOT NULL → categories` | Категория |
 | `subcategory_id` | `INTEGER → subcategories` | Подкатегория, должна принадлежать категории (проверяется в сервисе) |
@@ -96,6 +98,7 @@ erDiagram
 |---|---|
 | `init.sql` | Создаёт всю схему с нуля и заполняет справочники и примеры |
 | `migrate_add_dictionaries.sql` | Историческая: переводила текстовые категории/людей в таблицы-справочники с id. Для новых установок не нужна |
+| `migrate_add_amount_eur.sql` | Добавляет `amount_eur` и копирует в неё `amount` для EUR-строк; остальные сервер посчитает сам после рестарта |
 | `migrate_add_transaction_items.sql` | Добавляет `transaction_items`. Нужна для баз, созданных до появления чеков; идемпотентна (`IF NOT EXISTS`) |
 
 ```powershell

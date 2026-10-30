@@ -494,7 +494,11 @@ class TelegramBot(
     private fun formatTransaction(t: Transaction): String {
         val category = listOfNotNull(t.category, t.subCategory).joinToString(" / ")
         return buildString {
-            append("${t.amount.toPlainString()} ${t.currency} · $category\n")
+            append("${t.amount.toPlainString()} ${t.currency}")
+            if (t.currency != "EUR") {
+                append(t.amountEur?.let { " (≈ ${it.toPlainString()} EUR)" } ?: " (курс EUR пока не получен)")
+            }
+            append(" · $category\n")
             t.comment?.let { append("$it\n") }
             if (t.tags.isNotEmpty()) append(t.tags.joinToString(" ", postfix = "\n") { "#$it" })
             append(t.transactionDate.toString())

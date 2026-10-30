@@ -25,6 +25,8 @@ import kotlinx.serialization.json.Json
 import service.DictionaryService
 import service.TransactionService
 import java.io.File
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 fun main() {
     embeddedServer(Netty, port = System.getenv("PORT")?.toIntOrNull() ?: 8080) {
@@ -69,6 +71,8 @@ fun Application.module() {
         ).start()
     }
 
+    startAmountEurFiller(transactionService)
+
     if (System.getenv("BACKUP_DISABLED") != "true") {
         DatabaseBackup().start()
     }
@@ -92,5 +96,22 @@ fun Application.module() {
             call.respondFile(frontendIndex)
         }
     }
+}
+
+/** Fills missing EUR amounts right after startup and then hourly, so rows saved while rates were unavailable catch up. */
+private fun startAmountEurFiller(transactionService: TransactionService) {
+    val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "amount-eur-filler").apply { isDaemon = true }
+    }
+    scheduler.scheduleWithFixedDelay({
+        try {
+            val filled = transactionService.fillMissingAmountEur()
+            if (filled > 0) {
+                println("Filled EUR amounts for $filled transaction(s)")
+            }
+        } catch (e: Exception) {
+            System.err.println("Filling EUR amounts failed: ${e.message}")
+        }
+    }, 0, 60, TimeUnit.MINUTES)
 }
 

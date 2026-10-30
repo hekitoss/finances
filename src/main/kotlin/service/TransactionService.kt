@@ -12,7 +12,8 @@ import java.time.LocalDate
 
 class TransactionService(
     private val dao: TransactionDao,
-    private val dictionaryService: DictionaryService
+    private val dictionaryService: DictionaryService,
+    private val exchangeRates: ExchangeRateService = ExchangeRateService()
 ) {
     private data class TransactionInput(
         val transactionDate: LocalDate,
@@ -54,7 +55,7 @@ class TransactionService(
         val sheet = workbook.createSheet("Transactions")
 
         val headerRow = sheet.createRow(0)
-        val headers = listOf("Date", "Amount", "Currency", "Person", "Category", "Subcategory", "Comment", "Tags")
+        val headers = listOf("Date", "Amount", "Currency", "Amount EUR", "Person", "Category", "Subcategory", "Comment", "Tags")
         headers.forEachIndexed { index, header ->
             headerRow.createCell(index).setCellValue(header)
         }
@@ -64,11 +65,12 @@ class TransactionService(
             row.createCell(0).setCellValue(transaction.transactionDate.toString())
             row.createCell(1).setCellValue(transaction.amount.toPlainString())
             row.createCell(2).setCellValue(transaction.currency)
-            row.createCell(3).setCellValue(transaction.person ?: "")
-            row.createCell(4).setCellValue(transaction.category)
-            row.createCell(5).setCellValue(transaction.subCategory ?: "")
-            row.createCell(6).setCellValue(transaction.comment ?: "")
-            row.createCell(7).setCellValue(transaction.tags.joinToString(", "))
+            row.createCell(3).setCellValue(transaction.amountEur?.toPlainString() ?: "")
+            row.createCell(4).setCellValue(transaction.person ?: "")
+            row.createCell(5).setCellValue(transaction.category)
+            row.createCell(6).setCellValue(transaction.subCategory ?: "")
+            row.createCell(7).setCellValue(transaction.comment ?: "")
+            row.createCell(8).setCellValue(transaction.tags.joinToString(", "))
         }
 
         repeat(headers.size) { sheet.autoSizeColumn(it) }
@@ -97,6 +99,7 @@ class TransactionService(
             categoryId = input.categoryId,
             subcategoryId = input.subcategoryId,
             comment = input.comment,
+            amountEur = toEur(input),
             tagIds = input.tagIds.orEmpty()
         )
     }
@@ -131,6 +134,7 @@ class TransactionService(
             categoryId = input.categoryId,
             subcategoryId = input.subcategoryId,
             comment = input.comment,
+            amountEur = toEur(input),
             items = normalizedItems,
             tagIds = input.tagIds.orEmpty()
         )
@@ -139,6 +143,18 @@ class TransactionService(
     fun updateTransaction(id: Int, update: TransactionCreateDto): Transaction? {
         require(id > 0) { "Transaction id must be positive" }
         val input = normalizeInput(update)
+        val existing = dao.findById(id) ?: return null
+        // The rate is looked up again only when something it depends on changed.
+        val amountEur = if (
+            existing.amountEur != null &&
+            existing.amount.compareTo(input.amount) == 0 &&
+            existing.currency == input.currency &&
+            existing.transactionDate == input.transactionDate
+        ) {
+            existing.amountEur
+        } else {
+            toEur(input)
+        }
 
         return dao.update(
             id = id,
@@ -149,6 +165,7 @@ class TransactionService(
             categoryId = input.categoryId,
             subcategoryId = input.subcategoryId,
             comment = input.comment,
+            amountEur = amountEur,
             tagIds = input.tagIds
         )
     }
@@ -156,6 +173,22 @@ class TransactionService(
     fun deleteTransaction(id: Int): Boolean {
         require(id > 0) { "Transaction id must be positive" }
         return dao.delete(id)
+    }
+
+    /** Null when the rate is unavailable right now; [fillMissingAmountEur] retries later. */
+    private fun toEur(input: TransactionInput): BigDecimal? =
+        exchangeRates.toEur(input.amount, input.currency, input.transactionDate)
+
+    /** Converts rows that have no EUR amount yet (old rows, or saved while rates were unavailable); returns how many were filled. */
+    fun fillMissingAmountEur(): Int {
+        var filled = 0
+        for (transaction in dao.findMissingAmountEur()) {
+            val amountEur = exchangeRates.toEur(transaction.amount, transaction.currency, transaction.transactionDate) ?: continue
+            if (dao.fillAmountEur(transaction.id, amountEur)) {
+                filled++
+            }
+        }
+        return filled
     }
 
     private fun normalizeInput(create: TransactionCreateDto): TransactionInput {

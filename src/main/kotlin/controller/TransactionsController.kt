@@ -27,6 +27,7 @@ class TransactionsController(private val service: TransactionService) {
         transactionDate = transaction.transactionDate.toString(),
         amount = transaction.amount.toPlainString(),
         currency = transaction.currency,
+        amountEur = transaction.amountEur?.toPlainString(),
         person = transaction.person,
         category = transaction.category,
         subCategory = transaction.subCategory,

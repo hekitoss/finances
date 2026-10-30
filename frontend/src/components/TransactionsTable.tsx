@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import type { DictionariesResponse, Transaction, TransactionItem } from "../types";
 import { deleteTransaction, fetchTransactionItems } from "../api";
+import { eurAmount } from "../currency";
 import ColumnFilterDropdown, { isFilterActive, type ColumnFilter } from "./ColumnFilterDropdown";
 import TransactionEditForm from "./TransactionEditForm";
 import TransactionEditRow from "./TransactionEditRow";
@@ -26,6 +27,8 @@ interface TransactionsTableProps {
   dictionaries?: DictionariesResponse | null;
   onDictionariesChanged?: () => Promise<unknown>;
   onTransactionUpdated?: () => void;
+  /** "All currencies" view: show each amount in EUR, with the original amount smaller under it. */
+  showEur?: boolean;
 }
 
 // Must match the breakpoint in styles.css where the table is swapped for cards.
@@ -73,6 +76,22 @@ async function handleDelete(id: number, onDeleted: (id: number) => void) {
 
 function amountClass(amount: string): string {
   return Number.parseFloat(amount) < 0 ? "amount-negative" : "amount-positive";
+}
+
+/** The amount as stored, or in EUR with the original under it; a row without a known rate keeps its original amount. */
+function AmountValue({ transaction, showEur }: { transaction: Transaction; showEur: boolean }) {
+  const original = formatAmount(transaction.amount, transaction.currency);
+  if (!showEur || transaction.currency === "EUR") {
+    return <>{original}</>;
+  }
+
+  const eur = eurAmount(transaction);
+  return (
+    <>
+      {eur === null ? original : formatAmount(eur, "EUR")}
+      <span className="amount-original">{eur === null ? "no EUR rate yet" : original}</span>
+    </>
+  );
 }
 
 function RowActions({
@@ -167,7 +186,8 @@ export default function TransactionsTable({
   editMode = false,
   dictionaries = null,
   onDictionariesChanged = async () => {},
-  onTransactionUpdated = () => {}
+  onTransactionUpdated = () => {},
+  showEur = false
 }: TransactionsTableProps) {
   const columnCount = editMode ? 8 : 7;
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
@@ -287,7 +307,9 @@ export default function TransactionsTable({
                         <td>{transaction.category}</td>
                         <td>{transaction.subCategory ?? "-"}</td>
                         <td>{transaction.person ?? "-"}</td>
-                        <td className="table-amount">{formatAmount(transaction.amount, transaction.currency)}</td>
+                        <td className="table-amount">
+                          <AmountValue transaction={transaction} showEur={showEur} />
+                        </td>
                         <td>{transaction.tags.length > 0 ? <TagChips tags={transaction.tags} /> : "-"}</td>
                         <td>
                           {transaction.comment ?? "-"}
@@ -342,7 +364,7 @@ export default function TransactionsTable({
                     {transaction.subCategory && <span> · {transaction.subCategory}</span>}
                   </div>
                   <div className={`transaction-card-amount ${amountClass(transaction.amount)}`}>
-                    {formatAmount(transaction.amount, transaction.currency)}
+                    <AmountValue transaction={transaction} showEur={showEur} />
                   </div>
                 </div>
                 <div className="transaction-card-meta">

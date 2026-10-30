@@ -53,8 +53,12 @@ export async function fetchTransactions(range?: DateRange | null): Promise<Trans
   }
 
   const data = (await response.json()) as Transaction[];
-  // A server without tag support omits the field; keep the UI working until it is restarted.
-  return data.map((transaction) => ({ ...transaction, tags: transaction.tags ?? [] }));
+  // An older server omits these fields; keep the UI working until it is restarted.
+  return data.map((transaction) => ({
+    ...transaction,
+    amountEur: transaction.amountEur ?? null,
+    tags: transaction.tags ?? []
+  }));
 }
 
 function readFileName(contentDisposition: string | null, fallback: string): string {

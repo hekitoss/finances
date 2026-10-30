@@ -5,11 +5,14 @@ import type { DictionariesResponse, Transaction } from "../types";
 import TransactionsTable from "../components/TransactionsTable";
 import CategoryPieChart from "../components/CategoryPieChart";
 import DateRangePicker, { monthRange } from "../components/DateRangePicker";
+import { eurAmount } from "../currency";
 
 const currentDate = new Date();
 const DEFAULT_RANGE = monthRange(currentDate.getFullYear(), currentDate.getMonth());
-const CURRENCIES = ["EUR", "RUB", "USD", "JPY"] as const;
-type Currency = (typeof CURRENCIES)[number];
+/** "All" shows every currency, with totals and the chart in EUR. */
+const ALL_CURRENCIES = "All";
+/** "All" or an ISO currency code; the choices are the currencies present in the loaded rows. */
+type Currency = string;
 const FILTERS_STORAGE_KEY = "dashboard-filters";
 
 interface SavedFilters {
@@ -44,7 +47,7 @@ function loadSavedFilters(): SavedFilters {
           : range && typeof range.from === "string" && typeof range.to === "string"
             ? { from: range.from, to: range.to }
             : defaults.range,
-      currency: CURRENCIES.find((currency) => currency === saved?.currency) ?? defaults.currency,
+      currency: typeof saved?.currency === "string" ? saved.currency : defaults.currency,
       excludedCategories: isStringArray(saved?.excludedCategories)
         ? saved.excludedCategories
         : defaults.excludedCategories,
@@ -153,10 +156,24 @@ export default function DashboardPage() {
     }
   };
 
-  // Amounts in different currencies must never be summed, so everything below works on one currency only.
+  const currencyOptions = useMemo(
+    () => [ALL_CURRENCIES, ...uniqueSorted(transactions.map((t) => t.currency.trim().toUpperCase()))],
+    [transactions]
+  );
+
+  // A saved currency missing from the current period shows as "All", but stays saved, so it comes back
+  // when switching to a period that has it.
+  const activeCurrency = loading || currencyOptions.includes(selectedCurrency) ? selectedCurrency : ALL_CURRENCIES;
+  const showAllCurrencies = activeCurrency === ALL_CURRENCIES;
+
+  // Amounts in different currencies must never be summed, so everything below works on one currency only,
+  // or, for "All", on EUR amounts.
   const currencyTransactions = useMemo(() => {
-    return transactions.filter((t) => t.currency.trim().toUpperCase() === selectedCurrency);
-  }, [transactions, selectedCurrency]);
+    if (showAllCurrencies) {
+      return transactions;
+    }
+    return transactions.filter((t) => t.currency.trim().toUpperCase() === activeCurrency);
+  }, [transactions, activeCurrency, showAllCurrencies]);
 
   const categoryOptions = useMemo(() => uniqueSorted(currencyTransactions.map((t) => t.category)), [currencyTransactions]);
 
@@ -236,8 +253,32 @@ export default function DashboardPage() {
     setSelectedTags([]);
   };
 
+  // Rows in the chart and totals: in "All" mode amounts are replaced by their EUR value, and rows whose rate
+  // is not known yet are left out (the table still shows them).
+  const summedTransactions = useMemo(() => {
+    if (!showAllCurrencies) {
+      return filteredTransactions;
+    }
+    return filteredTransactions.flatMap((t) => {
+      const eur = eurAmount(t);
+      return eur === null ? [] : [{ ...t, amount: eur }];
+    });
+  }, [filteredTransactions, showAllCurrencies]);
+
+  const chartAllTransactions = useMemo(() => {
+    if (!showAllCurrencies) {
+      return personTransactions;
+    }
+    return personTransactions.flatMap((t) => {
+      const eur = eurAmount(t);
+      return eur === null ? [] : [{ ...t, amount: eur }];
+    });
+  }, [personTransactions, showAllCurrencies]);
+
+  const rowsWithoutRate = filteredTransactions.length - summedTransactions.length;
+
   const amountSummary = useMemo(() => {
-    return filteredTransactions.reduce(
+    return summedTransactions.reduce(
       (totals, item) => {
         const parsed = Number.parseFloat(item.amount);
         if (Number.isNaN(parsed)) {
@@ -255,7 +296,9 @@ export default function DashboardPage() {
       },
       { expenses: 0, income: 0, total: 0 }
     );
-  }, [filteredTransactions]);
+  }, [summedTransactions]);
+
+  const totalsSuffix = showAllCurrencies ? " EUR" : "";
 
   return (
     <main className="app-shell">
@@ -300,17 +343,24 @@ export default function DashboardPage() {
         </article>
         <article className="stat-card">
           <span>Expenses</span>
-          <strong>{amountSummary.expenses.toFixed(2)}</strong>
+          <strong>{amountSummary.expenses.toFixed(2)}{totalsSuffix}</strong>
         </article>
         <article className="stat-card">
           <span>Income</span>
-          <strong>{amountSummary.income.toFixed(2)}</strong>
+          <strong>{amountSummary.income.toFixed(2)}{totalsSuffix}</strong>
         </article>
         <article className="stat-card">
           <span>Total</span>
-          <strong>{amountSummary.total.toFixed(2)}</strong>
+          <strong>{amountSummary.total.toFixed(2)}{totalsSuffix}</strong>
         </article>
       </section>
+
+      {rowsWithoutRate > 0 && (
+        <p className="totals-note">
+          {rowsWithoutRate === 1 ? "1 row has" : `${rowsWithoutRate} rows have`} no EUR exchange rate yet and{" "}
+          {rowsWithoutRate === 1 ? "is" : "are"} not included in the totals and chart.
+        </p>
+      )}
 
       {/* In edit mode the chart is hidden and the table takes the full width, so a row being edited fits its fields. */}
       <section className={editMode ? "grid-two-columns grid-editing" : "grid-two-columns"}>
@@ -321,6 +371,7 @@ export default function DashboardPage() {
           dictionaries={dictionaries}
           onDictionariesChanged={loadDictionaries}
           onTransactionUpdated={() => void loadTransactions()}
+          showEur={showAllCurrencies}
           filters={{
             category: {
               selected: selectedCategories,
@@ -337,12 +388,11 @@ export default function DashboardPage() {
             person: { selected: selectedPersons, options: personOptions, onChange: setSelectedPersons },
             tags: { selected: selectedTags, options: tagOptions, onChange: setSelectedTags },
             currency: {
-              selected: [selectedCurrency],
-              options: [...CURRENCIES],
+              selected: [activeCurrency],
+              options: currencyOptions,
               onChange: (selected) => {
-                const next = CURRENCIES.find((currency) => currency === selected[0]);
-                if (next) {
-                  setSelectedCurrency(next);
+                if (selected[0]) {
+                  setSelectedCurrency(selected[0]);
                 }
               }
             },
@@ -352,8 +402,8 @@ export default function DashboardPage() {
         {/* The chart shows only the active categories; hidden ones stay in the legend so they can be re-added. */}
         {!editMode && (
           <CategoryPieChart
-            transactions={filteredTransactions}
-            allTransactions={personTransactions}
+            transactions={summedTransactions}
+            allTransactions={chartAllTransactions}
             onCategoryClick={handleChartCategoryClick}
           />
         )}

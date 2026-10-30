@@ -23,6 +23,7 @@ class TransactionDao(private val ds: DataSource) {
             t.transaction_date,
             t.amount,
             t.currency,
+            t.amount_eur,
             t.person_id,
             p.name AS person,
             t.category_id,
@@ -98,9 +99,10 @@ class TransactionDao(private val ds: DataSource) {
         categoryId: Int,
         subcategoryId: Int?,
         comment: String?,
+        amountEur: BigDecimal?,
         tagIds: List<Int> = emptyList()
     ): Transaction = inTransaction { conn ->
-        val transaction = insertOn(conn, transactionDate, amount, currency, personId, categoryId, subcategoryId, comment)
+        val transaction = insertOn(conn, transactionDate, amount, currency, personId, categoryId, subcategoryId, comment, amountEur)
         if (tagIds.isEmpty()) {
             transaction
         } else {
@@ -155,6 +157,7 @@ class TransactionDao(private val ds: DataSource) {
         categoryId: Int,
         subcategoryId: Int?,
         comment: String?,
+        amountEur: BigDecimal?,
         items: List<TransactionItem>,
         tagIds: List<Int> = emptyList()
     ): Transaction {
@@ -167,7 +170,7 @@ class TransactionDao(private val ds: DataSource) {
             val autoCommit = conn.autoCommit
             conn.autoCommit = false
             try {
-                val transaction = insertOn(conn, transactionDate, amount, currency, personId, categoryId, subcategoryId, comment)
+                val transaction = insertOn(conn, transactionDate, amount, currency, personId, categoryId, subcategoryId, comment, amountEur)
                 conn.prepareStatement(itemSql).use { stmt ->
                     items.forEachIndexed { index, item ->
                         stmt.setInt(1, transaction.id)
@@ -232,19 +235,21 @@ class TransactionDao(private val ds: DataSource) {
         personId: Int?,
         categoryId: Int,
         subcategoryId: Int?,
-        comment: String?
+        comment: String?,
+        amountEur: BigDecimal?
     ): Transaction {
         val sql = """
             WITH inserted AS (
-                INSERT INTO transactions (transaction_date, amount, currency, person_id, category_id, subcategory_id, comment)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                RETURNING id, transaction_date, amount, currency, person_id, category_id, subcategory_id, comment
+                INSERT INTO transactions (transaction_date, amount, currency, person_id, category_id, subcategory_id, comment, amount_eur)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                RETURNING id, transaction_date, amount, currency, amount_eur, person_id, category_id, subcategory_id, comment
             )
             SELECT
                 i.id,
                 i.transaction_date,
                 i.amount,
                 i.currency,
+                i.amount_eur,
                 i.person_id,
                 p.name AS person,
                 i.category_id,
@@ -269,6 +274,7 @@ class TransactionDao(private val ds: DataSource) {
             stmt.setInt(5, categoryId)
             if (subcategoryId != null) stmt.setInt(6, subcategoryId) else stmt.setNull(6, java.sql.Types.INTEGER)
             if (comment != null) stmt.setString(7, comment) else stmt.setNull(7, java.sql.Types.VARCHAR)
+            if (amountEur != null) stmt.setBigDecimal(8, amountEur) else stmt.setNull(8, java.sql.Types.NUMERIC)
 
             stmt.executeQuery().use { rs ->
                 if (rs.next()) {
@@ -300,6 +306,7 @@ class TransactionDao(private val ds: DataSource) {
         categoryId: Int,
         subcategoryId: Int?,
         comment: String?,
+        amountEur: BigDecimal?,
         tagIds: List<Int>? = null
     ): Transaction? {
         val sql = """
@@ -311,15 +318,17 @@ class TransactionDao(private val ds: DataSource) {
                     person_id = ?,
                     category_id = ?,
                     subcategory_id = ?,
-                    comment = ?
+                    comment = ?,
+                    amount_eur = ?
                 WHERE id = ?
-                RETURNING id, transaction_date, amount, currency, person_id, category_id, subcategory_id, comment
+                RETURNING id, transaction_date, amount, currency, amount_eur, person_id, category_id, subcategory_id, comment
             )
             SELECT
                 u.id,
                 u.transaction_date,
                 u.amount,
                 u.currency,
+                u.amount_eur,
                 u.person_id,
                 p.name AS person,
                 u.category_id,
@@ -344,7 +353,8 @@ class TransactionDao(private val ds: DataSource) {
                 stmt.setInt(5, categoryId)
                 if (subcategoryId != null) stmt.setInt(6, subcategoryId) else stmt.setNull(6, java.sql.Types.INTEGER)
                 if (comment != null) stmt.setString(7, comment) else stmt.setNull(7, java.sql.Types.VARCHAR)
-                stmt.setInt(8, id)
+                if (amountEur != null) stmt.setBigDecimal(8, amountEur) else stmt.setNull(8, java.sql.Types.NUMERIC)
+                stmt.setInt(9, id)
 
                 stmt.executeQuery().use { rs ->
                     if (rs.next()) mapRow(rs) else null
@@ -359,11 +369,41 @@ class TransactionDao(private val ds: DataSource) {
         }
     }
 
+    /** Rows whose EUR amount is not known yet (added before conversion existed, or while rates were unavailable). */
+    fun findMissingAmountEur(): List<Transaction> {
+        val sql = "$baseSelect WHERE t.amount_eur IS NULL ORDER BY t.transaction_date, t.id"
+
+        ds.connection.use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.executeQuery().use { rs ->
+                    val list = mutableListOf<Transaction>()
+                    while (rs.next()) {
+                        list += mapRow(rs)
+                    }
+                    return list
+                }
+            }
+        }
+    }
+
+    /** Sets the EUR amount only if it is still empty, so a concurrent edit is never overwritten. */
+    fun fillAmountEur(id: Int, amountEur: BigDecimal): Boolean {
+        val sql = "UPDATE transactions SET amount_eur = ? WHERE id = ? AND amount_eur IS NULL"
+        ds.connection.use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setBigDecimal(1, amountEur)
+                stmt.setInt(2, id)
+                return stmt.executeUpdate() > 0
+            }
+        }
+    }
+
     private fun mapRow(rs: ResultSet): Transaction {
         val id = rs.getInt("id")
         val date = rs.getDate("transaction_date")?.toLocalDate() ?: LocalDate.MIN
         val amount = rs.getBigDecimal("amount") ?: BigDecimal.ZERO
         val currency = rs.getString("currency")
+        val amountEur = rs.getBigDecimal("amount_eur")
         val personId = rs.getInt("person_id").takeUnless { rs.wasNull() }
         val person = rs.getString("person")
         val categoryId = rs.getInt("category_id")
@@ -377,6 +417,7 @@ class TransactionDao(private val ds: DataSource) {
             transactionDate = date,
             amount = amount,
             currency = currency,
+            amountEur = amountEur,
             personId = personId,
             person = person,
             categoryId = categoryId,

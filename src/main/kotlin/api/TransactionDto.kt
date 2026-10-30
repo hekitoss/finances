@@ -8,6 +8,8 @@ data class TransactionDto(
     val transactionDate: String,
     val amount: String,
     val currency: String,
+    /** The amount converted to EUR; null while the exchange rate is not known yet. */
+    val amountEur: String? = null,
     val person: String? = null,
     val category: String,
     val subCategory: String? = null,

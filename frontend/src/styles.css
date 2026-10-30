@@ -610,6 +610,20 @@ tbody tr:not(.receipt-row):hover td {
   color: var(--text);
 }
 
+/* "All currencies" view: the original non-EUR amount under its EUR value. */
+.amount-original {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-subtle);
+}
+
+.totals-note {
+  margin: -8px 0 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
 .amount-positive {
   color: var(--positive);
 }

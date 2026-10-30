@@ -3,6 +3,8 @@ export interface Transaction {
   transactionDate: string;
   amount: string;
   currency: string;
+  /** The amount converted to EUR at the rate of the transaction date; null while the rate is not known yet. */
+  amountEur: string | null;
   person: string | null;
   category: string;
   subCategory: string | null;

@@ -8,6 +8,8 @@ data class Transaction(
     val transactionDate: LocalDate,
     val amount: BigDecimal,
     val currency: String,
+    /** [amount] converted to EUR at the rate of [transactionDate]; null until the rate is known. */
+    val amountEur: BigDecimal?,
     val personId: Int?,
     val person: String?,
     val categoryId: Int,

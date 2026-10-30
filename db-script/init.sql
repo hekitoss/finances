@@ -20,6 +20,7 @@ CREATE TABLE transactions (
     transaction_date DATE NOT NULL,
     amount           NUMERIC(12, 2) NOT NULL,
     currency         VARCHAR(3) NOT NULL DEFAULT 'EUR',
+    amount_eur       NUMERIC(12, 2),
     person_id        INTEGER REFERENCES persons(id),
     category_id      INTEGER NOT NULL REFERENCES categories(id),
     subcategory_id   INTEGER REFERENCES subcategories(id),
