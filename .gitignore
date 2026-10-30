@@ -28,3 +28,5 @@ Thumbs.db
 /receipts/
 /db-script/console.sql
 /bot-settings.properties
+/frontend/test-results/
+/frontend/playwright-report/

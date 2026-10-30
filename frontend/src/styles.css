@@ -532,9 +532,9 @@ a {
 
 .grid-two-columns {
   display: grid;
-  /* minmax(0, ...) keeps the columns proportional; otherwise the table's content width resizes the chart column
-     whenever filters change the rows, and the pie legend reflows. The table scrolls inside .table-wrap instead. */
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  /* The chart column's width depends only on the page width: sized by content, it changed whenever filters changed
+     the table rows, and the pie legend reflowed. The table gets the rest and scrolls inside .table-wrap if it must. */
+  grid-template-columns: minmax(0, 1fr) clamp(260px, 28%, 420px);
   gap: 16px;
   align-items: start;
 }

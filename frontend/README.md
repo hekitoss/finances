@@ -39,6 +39,20 @@ npm run build
 npm run preview
 ```
 
+## Tests
+
+The tests never call the backend: every `/api` request is answered from `tests/fixtures.ts`.
+
+```powershell
+Set-Location "C:\Users\Никита\Documents\Syncthing\finances\frontend"
+npm test               # Vitest + Testing Library in jsdom (tests/unit)
+npm run test:e2e       # Playwright in Chromium: layout, hover, phone width (tests/e2e)
+npm run test:types     # type-check the tests
+```
+
+Before the first `test:e2e` run, install the browser once: `npx playwright install chromium`.
+Playwright starts the dev server on port 5174 by itself.
+
 ## Backend requirement
 
 Backend must be running and expose:
