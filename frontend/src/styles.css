@@ -50,6 +50,11 @@
   box-sizing: border-box;
 }
 
+/* Reserve the scrollbar's space so filtering rows (and toggling the page scrollbar) doesn't change the layout width. */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -527,7 +532,9 @@ a {
 
 .grid-two-columns {
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
+  /* minmax(0, ...) keeps the columns proportional; otherwise the table's content width resizes the chart column
+     whenever filters change the rows, and the pie legend reflows. The table scrolls inside .table-wrap instead. */
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
