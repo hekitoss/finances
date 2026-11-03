@@ -69,16 +69,18 @@ sequenceDiagram
 
 ### Провайдеры
 
-| | Gemini (по умолчанию) | Claude |
-|---|---|---|
-| Класс | `GeminiExpenseParser` | `ClaudeExpenseParser` |
-| Модель по умолчанию | `gemini-3.5-flash-lite` | `claude-opus-5-5` |
-| Как вызывается | HTTP к Gemini Interactions API | Официальный SDK `anthropic-java` |
-| Стоимость | Бесплатный тариф с лимитами | Оплата за токены; `claude-haiku-5-5` — около $0.15 за 1000 трат |
-| Рассуждения модели | `thinking_level`: `minimal` для текста, `low` для чеков | `effort`: `LOW` для текста, `MEDIUM` для чеков |
-| Форматы чеков | JPEG, PNG, WebP, HEIC, PDF | JPEG, PNG, WebP, GIF, PDF |
+| | Gemini (по умолчанию) | Claude | Ollama (локально) |
+|---|---|---|---|
+| Класс | `GeminiExpenseParser` | `ClaudeExpenseParser` | `OllamaExpenseParser` |
+| Модель по умолчанию | `gemini-3.5-flash-lite` | `claude-opus-5-5` | `qwen3:14b` (текст); для чеков — `OLLAMA_VISION_MODEL` |
+| Как вызывается | HTTP к Gemini Interactions API | Официальный SDK `anthropic-java` | HTTP к `/api/chat`, JSON Schema в `format` |
+| Стоимость | Бесплатный тариф с лимитами | Оплата за токены; `claude-haiku-5-5` — около $0.15 за 1000 трат | Бесплатно, данные не уходят из дома |
+| Рассуждения модели | `thinking_level`: `minimal` для текста, `low` для чеков | `effort`: `LOW` для текста, `MEDIUM` для чеков | Выключены (`OLLAMA_THINK=true` включает) |
+| Форматы чеков | JPEG, PNG, WebP, HEIC, PDF | JPEG, PNG, WebP, GIF, PDF | JPEG, PNG при заданной `OLLAMA_VISION_MODEL`; остальное — в облачный провайдер, если есть ключ |
 
-Выбор провайдера — `AI_PROVIDER=gemini|claude`; модель — `GEMINI_MODEL` / `CLAUDE_MODEL`.
+Выбор провайдера — `AI_PROVIDER=gemini|claude|ollama`; модель — `GEMINI_MODEL` / `CLAUDE_MODEL` / `OLLAMA_MODEL`.
+
+`qwen3:14b` — текстовая модель и картинок не видит. При `AI_PROVIDER=ollama` чек-фото разбирает `OLLAMA_VISION_MODEL` (например `qwen2.5vl:7b`), а PDF и фото без неё уходят в Gemini или Claude, если задан `GEMINI_API_KEY` или `ANTHROPIC_API_KEY`. Для локальных моделей в схему ответа добавляются `enum` с реальными id категорий, подкатегорий и тегов, чтобы модель не могла выдумать несуществующий id.
 
 ### Промпты и схемы
 

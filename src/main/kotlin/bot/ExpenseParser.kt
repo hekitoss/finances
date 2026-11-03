@@ -70,17 +70,29 @@ interface ExpenseParser {
     ): ParsedReceipt
 
     companion object {
-        /** AI_PROVIDER = "gemini" | "claude"; defaults to gemini when GEMINI_API_KEY is set. */
+        /** AI_PROVIDER = "gemini" | "claude" | "ollama"; defaults to gemini when GEMINI_API_KEY is set. */
         fun fromEnv(): ExpenseParser {
             val provider = System.getenv("AI_PROVIDER")?.lowercase()
-                ?: if (!System.getenv("GEMINI_API_KEY").isNullOrBlank()) "gemini" else "claude"
+                ?: if (hasEnv("GEMINI_API_KEY")) "gemini" else "claude"
             println("Expense parser provider: $provider")
             return when (provider) {
                 "gemini" -> GeminiExpenseParser()
                 "claude" -> ClaudeExpenseParser()
-                else -> throw IllegalArgumentException("Unknown AI_PROVIDER: $provider (expected gemini or claude)")
+                "ollama" -> {
+                    // Receipts the local models can't read go to a cloud provider, if one is configured.
+                    val fallback = when {
+                        hasEnv("GEMINI_API_KEY") -> GeminiExpenseParser()
+                        hasEnv("ANTHROPIC_API_KEY") -> ClaudeExpenseParser()
+                        else -> null
+                    }
+                    println("Ollama receipt fallback: ${fallback?.javaClass?.simpleName ?: "none"}")
+                    OllamaExpenseParser(receiptFallback = fallback)
+                }
+                else -> throw IllegalArgumentException("Unknown AI_PROVIDER: $provider (expected gemini, claude or ollama)")
             }
         }
+
+        private fun hasEnv(name: String) = !System.getenv(name).isNullOrBlank()
     }
 }
 

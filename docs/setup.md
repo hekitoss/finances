@@ -75,11 +75,17 @@ java -jar build\libs\finances-all.jar
 | `TELEGRAM_BOT_TOKEN` | — | Токен бота от @BotFather. Без него бот не запускается, сайт работает |
 | `TELEGRAM_USERS_FILE` | `bot.properties` | Путь к файлу с разрешёнными пользователями |
 | `TELEGRAM_USERS` | — | Дополнительные пользователи `id:Имя,id:Имя`; перекрывают файл |
-| `AI_PROVIDER` | `gemini`, если задан `GEMINI_API_KEY`, иначе `claude` | Какой ИИ разбирает сообщения и чеки |
+| `AI_PROVIDER` | `gemini`, если задан `GEMINI_API_KEY`, иначе `claude` | Какой ИИ разбирает сообщения и чеки: `gemini`, `claude` или `ollama` |
 | `GEMINI_API_KEY` | — | Ключ Gemini API |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Модель Gemini |
 | `ANTHROPIC_API_KEY` | — | Ключ Claude API (при `AI_PROVIDER=claude`) |
 | `CLAUDE_MODEL` | `claude-opus-5-5` | Модель Claude |
+| `OLLAMA_URL` | `http://localhost:11434` | Адрес Ollama (при `AI_PROVIDER=ollama`) |
+| `OLLAMA_MODEL` | `qwen3:14b` | Локальная модель для текстовых сообщений |
+| `OLLAMA_VISION_MODEL` | — | Локальная модель с картинками для фото чеков, например `qwen2.5vl:7b`. Без неё чеки идут в Gemini/Claude, если есть ключ |
+| `OLLAMA_NUM_CTX` | `8192` | Размер контекста для Ollama |
+| `OLLAMA_THINK` | `false` | `true` включает рассуждения qwen3 (медленнее) |
+| `OLLAMA_KEEP_ALIVE` | — (у Ollama 5 минут) | Сколько держать модель в видеопамяти после запроса: `30m`, `2h`, `-1` — всегда. Холодная загрузка qwen3:14b занимает до ~2.5 минут |
 | `BACKUP_DIR` | `backup` | Папка для ежемесячных бэкапов базы |
 | `BACKUP_KEEP` | `12` | Сколько последних бэкапов хранить |
 | `DB_CONTAINER` | `finances_db` | Docker-контейнер, в котором запускается `pg_dump` |
@@ -96,6 +102,7 @@ setx GEMINI_API_KEY "AIza..."
 1. **Токен бота.** В Telegram откройте @BotFather → `/newbot` → задайте имя и username (должен оканчиваться на `bot`). Сохраните токен в `TELEGRAM_BOT_TOKEN`.
 2. **Ключ ИИ.**
    - *Gemini (бесплатный тариф):* https://aistudio.google.com/apikey → **Create API key**. Не включайте billing — тогда списаний не будет. Сохраните в `GEMINI_API_KEY`.
+   - *Локально через Ollama (бесплатно):* установите https://ollama.com, выполните `ollama pull qwen3:14b` (и при желании `ollama pull qwen2.5vl:7b` для фото чеков), задайте `AI_PROVIDER=ollama` (и `OLLAMA_VISION_MODEL=qwen2.5vl:7b`). Ключ не нужен; `GEMINI_API_KEY` можно оставить — тогда PDF-чеки разберёт Gemini.
    - *Claude (платно, по факту использования):* https://console.anthropic.com → Billing (пополнить баланс) → API Keys. Сохраните в `ANTHROPIC_API_KEY` и задайте `AI_PROVIDER=claude`. Подписка Claude Pro/Max на API не распространяется.
 3. **Разрешённые пользователи.** Узнайте свой Telegram id (напишите @userinfobot или просто напишите боту — он ответит id) и добавьте его в `bot.properties`:
 
