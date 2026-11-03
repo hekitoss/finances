@@ -14,6 +14,7 @@
 
 # Logs / env
 *.log
+/logs/
 .env
 
 # OS

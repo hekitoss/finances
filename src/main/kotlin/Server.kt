@@ -27,8 +27,10 @@ import service.TransactionService
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import logging.FileLogging
 
 fun main() {
+    FileLogging.install()
     embeddedServer(Netty, port = System.getenv("PORT")?.toIntOrNull() ?: 8080) {
         module()
     }.start(wait = true)

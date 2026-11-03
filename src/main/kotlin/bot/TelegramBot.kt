@@ -9,6 +9,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -93,7 +94,27 @@ class TelegramBot(
         }
     }
 
+    /**
+     * Logs what Telegram holds for the bot at startup. getUpdates returns nothing while a webhook is set, so a
+     * leftover webhook is removed; drop_pending_updates=false keeps the messages sent while the app was off.
+     */
+    private fun checkPendingUpdates() {
+        try {
+            val info = call("getWebhookInfo", buildJsonObject {}).jsonObject
+            val pending = info["pending_update_count"]?.jsonPrimitive?.intOrNull ?: 0
+            val webhookUrl = info["url"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            println("Telegram: $pending pending update(s) waiting since the last run")
+            if (webhookUrl.isNotEmpty()) {
+                println("Telegram: webhook is set to $webhookUrl, removing it so polling receives updates")
+                call("deleteWebhook", buildJsonObject { put("drop_pending_updates", false) })
+            }
+        } catch (e: Exception) {
+            System.err.println("Failed to check pending Telegram updates: ${e.message}")
+        }
+    }
+
     private fun pollLoop() {
+        checkPendingUpdates()
         var offset = 0L
         while (true) {
             try {
