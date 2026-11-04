@@ -1,0 +1,22 @@
+# В образ попадают только исходники; данные и секреты подключаются томами при запуске.
+.git
+.gradle
+.idea
+.kotlin
+.claude
+build
+out
+logs
+backup
+receipts
+db-script
+docs
+*.log
+.env
+*.properties
+!gradle.properties
+frontend/node_modules
+frontend/dist
+frontend/test-results
+frontend/playwright-report
+frontend/*.tsbuildinfo

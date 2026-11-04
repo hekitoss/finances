@@ -1,0 +1,68 @@
+# Сервер finances (сайт на 8080 + Telegram-бот) в Docker.
+# PostgreSQL остаётся вашим контейнером finances_db из docker-compose.yml: он не пересоздаётся,
+# а подключается через внешнюю сеть finances_net (одноразовая настройка в docs/docker.md).
+#
+#   docker compose -f docker-compose.app.yml up -d --build
+#   docker compose -f docker-compose.app.yml logs -f
+#
+# Не запускайте одновременно с сервером из IDEA: занят порт 8080, а два бота с одним токеном
+# мешают друг другу (Telegram отдаёт сообщение только одному, второй получает 409 Conflict).
+
+name: finances-app
+
+services:
+  app:
+    build: .
+    container_name: finances_app
+    restart: unless-stopped
+    networks: [default, finances_net]
+    ports:
+      - "8080:8080"                     # все адреса ПК, чтобы открывать с телефона (без пароля!)
+    env_file: ${ENV_FILE:-.env}         # TELEGRAM_BOT_TOKEN, GEMINI_API_KEY, AI_PROVIDER и т.п.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Ollama на Windows (на Docker Desktop имя и так есть)
+    environment:                        # environment важнее env_file
+      TZ: Europe/Berlin
+      DB_URL: jdbc:postgresql://finances_db:5432/finances
+      # Ollama остаётся на Windows; другой адрес можно задать в .env как DOCKER_OLLAMA_URL=...
+      OLLAMA_URL: ${DOCKER_OLLAMA_URL:-http://host.docker.internal:11434}
+      LOG_DIR: /app/logs
+      RECEIPTS_DIR: /app/receipts
+      BACKUP_DIR: /app/backup
+      TELEGRAM_USERS_FILE: /app/bot.properties
+      BOT_SETTINGS_FILE: /app/bot-settings.properties
+    volumes:
+      - type: bind                      # logs/ГГГГ-ММ-ДД.log
+        source: ${PROJECT_DIR:-.}/logs
+        target: /app/logs
+        bind: { create_host_path: true }
+      - type: bind                      # фото и PDF чеков из бота
+        source: ${PROJECT_DIR:-.}/receipts
+        target: /app/receipts
+        bind: { create_host_path: true }
+      - type: bind                      # ежемесячные бэкапы базы
+        source: ${PROJECT_DIR:-.}/backup
+        target: /app/backup
+        bind: { create_host_path: true }
+      - type: bind                      # кто может писать боту
+        source: ${PROJECT_DIR:-.}/bot.properties
+        target: /app/bot.properties
+        read_only: true
+      - type: bind                      # валюта по умолчанию (/currency); бот перезаписывает файл
+        source: ${PROJECT_DIR:-.}/bot-settings.properties
+        target: /app/bot-settings.properties
+      - type: bind                      # бэкап: `docker exec finances_db pg_dump` изнутри контейнера
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+    healthcheck:                        # отвечает, только если жива и база
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/api/dictionaries"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    stop_grace_period: 20s
+
+networks:
+  finances_net:                         # сеть, к которой подключён finances_db
+    external: true
+    name: ${DB_NETWORK:-finances_net}
