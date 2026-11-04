@@ -193,8 +193,9 @@ class TelegramBot(
         val subcategories = dictionaryService.getAllSubcategories()
         val tags = dictionaryService.getAllTags()
 
+        val defaultCurrency = settings.defaultCurrency(userId)
         val parsed = try {
-            parser.parse(text, categories, subcategories, tags, settings.defaultCurrency(userId))
+            parser.parse(text, categories, subcategories, tags, defaultCurrency)
         } catch (e: Exception) {
             System.err.println("AI request failed: ${e.message}")
             sendError(chatId, messageId, "⚠️ Не удалось обработать сообщение: ${e.message}")
@@ -206,6 +207,13 @@ class TelegramBot(
             return
         }
 
+        // The AI tends to guess a currency (e.g. RUB for a Russian message) instead of using the default,
+        // so its answer is only taken when the message itself names a currency.
+        val currency = CurrencyHints.resolve(text, parsed.currency, defaultCurrency)
+        if (currency != parsed.currency) {
+            println("Bot: AI said currency ${parsed.currency} for \"$text\", using $currency")
+        }
+
         val personId = findPersonId(personName)
         val subcategoryId = validSubcategoryId(parsed.categoryId, parsed.subcategoryId, subcategories)
         val amount = toCents(parsed.amount).let { if (parsed.isIncome) it else it.negate() }
@@ -215,7 +223,7 @@ class TelegramBot(
                 TransactionCreateDto(
                     transactionDate = parsed.date,
                     amount = amount.toPlainString(),
-                    currency = parsed.currency,
+                    currency = currency,
                     personId = personId,
                     categoryId = parsed.categoryId,
                     subcategoryId = subcategoryId,
@@ -264,8 +272,9 @@ class TelegramBot(
             return
         }
 
+        val defaultCurrency = settings.defaultCurrency(userId)
         val receipt = try {
-            parser.parseReceipt(Attachment(bytes, mimeType), caption, categories, subcategories, tags, settings.defaultCurrency(userId))
+            parser.parseReceipt(Attachment(bytes, mimeType), caption, categories, subcategories, tags, defaultCurrency)
         } catch (e: Exception) {
             System.err.println("Receipt parsing failed: ${e.message}")
             saveReceiptFile { receiptStorage.saveUnmatched(bytes, mimeType) }
@@ -306,7 +315,8 @@ class TelegramBot(
                 TransactionCreateDto(
                     transactionDate = receipt.date,
                     amount = total.negate().toPlainString(),
-                    currency = receipt.currency,
+                    // The receipt usually shows its currency, so the AI's reading is kept unless it isn't a valid code.
+                    currency = receipt.currency.trim().uppercase().takeIf { it.matches(Regex("[A-Z]{3}")) } ?: defaultCurrency,
                     personId = findPersonId(personName),
                     categoryId = receipt.categoryId,
                     subcategoryId = validSubcategoryId(receipt.categoryId, receipt.subcategoryId, subcategories),
