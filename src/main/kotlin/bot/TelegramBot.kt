@@ -214,6 +214,12 @@ class TelegramBot(
             println("Bot: AI said currency ${parsed.currency} for \"$text\", using $currency")
         }
 
+        // The AI likes to embellish the comment ("мак" → "кофе в мак"); keep the user's own words instead.
+        val comment = CommentHints.resolve(text, parsed.comment)
+        if (comment != parsed.comment) {
+            println("Bot: AI said comment \"${parsed.comment}\" for \"$text\", using \"$comment\"")
+        }
+
         val personId = findPersonId(personName)
         val subcategoryId = validSubcategoryId(parsed.categoryId, parsed.subcategoryId, subcategories)
         val amount = toCents(parsed.amount).let { if (parsed.isIncome) it else it.negate() }
@@ -227,7 +233,7 @@ class TelegramBot(
                     personId = personId,
                     categoryId = parsed.categoryId,
                     subcategoryId = subcategoryId,
-                    comment = parsed.comment,
+                    comment = comment,
                     tagIds = validTagIds(parsed.tagIds, tags)
                 )
             )

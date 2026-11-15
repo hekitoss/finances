@@ -139,7 +139,13 @@ object ExpensePrompt {
             - amount is always a positive number; set isIncome=true only for money received (salary, refunds, payments to the user).
             - currency is a 3-letter ISO code; default to $defaultCurrency unless the message says otherwise (€ → EUR, ₽/руб → RUB, $ → USD, ¥/йен/иен → JPY).
             - subcategoryId must belong to the chosen categoryId, or be null if nothing fits well.
-            - comment is a short human-readable description of the purchase, in the user's language.
+            - comment is what the user wrote about the purchase, in their own words: copy the description from the message
+              without the amount, currency and date words. Don't add, translate or guess anything the message doesn't say
+              (e.g. "мак 8" → comment "мак", never "кофе в мак" or "обед в McDonald's").
+            - Users often write shops and chains by their nicknames; pick the category/subcategory by what the place is:
+              "мак", "макдак", "макдоналдс", "бк", "бургер кинг", "kfc", "кфс", "ростикс", "вкусно и точка", "subway",
+              "шаурма", "бургер" are fast food (prefer a "Fast food" subcategory if the list has one, not "Cafe");
+              "кофе", "кофейня", "старбакс" are a cafe.
             - If the message has no recognizable amount or is not about money at all, set understood=false
               (fill other fields with any valid placeholder values).
         """.trimIndent()
