@@ -171,12 +171,17 @@ object ExpensePrompt {
               payment method, change, card terminal data, loyalty points.
             - amount is the positive line total for that product (quantity × unit price), copied exactly from the
               receipt. Never round, estimate or rescale prices to make them fit the total.
-            - A discount line (Rabatt, Coupon, Preisvorteil, Aktion, Kartenrabatt, "K Card XTRA Rabatt" and the like) printed
-              directly below a product belongs to that product: subtract it from that product's amount only.
-              Bottle deposits (Pfand, Pfandartikel) go into the amount of the product they belong to;
-              deposit returns (Leergut) reduce the amount of the item they are printed next to.
-            - A discount that is clearly for the whole receipt (e.g. printed after the subtotal) is never spread over the
-              items: add it as its own item with a negative amount and a description like "Скидка (<name on receipt>)".
+            - A discount line (Rabatt, Preisvorteil, Aktion, Kartenrabatt, "K Card XTRA Rabatt" and the like) printed
+              among the products belongs to the product line directly ABOVE it (not the one below, not two lines up):
+              subtract it from that product's amount only. A Pfand line may follow the discount line; it still belongs
+              to the same product.
+            - Bottle deposits (Pfand, Pfandartikel) go into the amount of the product they belong to.
+            - Deposit returns (Leergut, Pfandrückgabe, Leergutbon) are their own item with a negative amount and the
+              description "Возврат тары (Leergut)"; never drop them and never subtract them from a product.
+            - Coupons or discounts listed in a separate block after the products or the subtotal (e.g. "Coupon 20% Reese's",
+              "10% COUPONAKTION") are never spread over the items. A coupon that names one product is subtracted from
+              that product; any other one becomes its own item with a negative amount and a description like
+              "Скидка (<name on receipt>)".
             - total is the final amount paid shown on the receipt. The item amounts normally add up to it exactly;
               if they don't, keep the prices as printed anyway.
             - description is a short readable product name in Russian, keeping the brand if useful
