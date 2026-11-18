@@ -169,11 +169,16 @@ object ExpensePrompt {
             Rules:
             - One entry per purchased product line. Skip non-product lines: subtotals, tax/VAT breakdowns,
               payment method, change, card terminal data, loyalty points.
-            - amount is the positive line total actually paid for that product (quantity × unit price),
-              after discounts that belong to that line. Bottle deposits (Pfand) go into the amount of the product they belong to;
+            - amount is the positive line total for that product (quantity × unit price), copied exactly from the
+              receipt. Never round, estimate or rescale prices to make them fit the total.
+            - A discount line (Rabatt, Coupon, Preisvorteil, Aktion, Kartenrabatt, "K Card XTRA Rabatt" and the like) printed
+              directly below a product belongs to that product: subtract it from that product's amount only.
+              Bottle deposits (Pfand, Pfandartikel) go into the amount of the product they belong to;
               deposit returns (Leergut) reduce the amount of the item they are printed next to.
-            - A discount that applies to the whole receipt is spread proportionally over the items.
-            - The sum of all item amounts must equal total, the final amount paid shown on the receipt.
+            - A discount that is clearly for the whole receipt (e.g. printed after the subtotal) is never spread over the
+              items: add it as its own item with a negative amount and a description like "Скидка (<name on receipt>)".
+            - total is the final amount paid shown on the receipt. The item amounts normally add up to it exactly;
+              if they don't, keep the prices as printed anyway.
             - description is a short readable product name in Russian, keeping the brand if useful
               (e.g. "Молоко 3.5% (Weihenstephan)").
             - store is the shop name. currency is a 3-letter ISO code ($defaultCurrency if not shown).

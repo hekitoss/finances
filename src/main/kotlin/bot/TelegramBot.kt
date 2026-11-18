@@ -288,8 +288,9 @@ class TelegramBot(
             return
         }
 
-        val items = receipt.items.filter { it.amount > 0.0 }
-        if (!receipt.understood || items.isEmpty()) {
+        // Negative items are whole-receipt discounts; a receipt still needs at least one real product.
+        val items = receipt.items.filter { it.amount != 0.0 }
+        if (!receipt.understood || items.none { it.amount > 0.0 }) {
             saveReceiptFile { receiptStorage.saveUnmatched(bytes, mimeType) }
             sendMessage(chatId, "🤔 Не получилось прочитать чек. Попробуй сфотографировать ровнее и при хорошем свете.")
             return
