@@ -313,6 +313,12 @@ class TelegramBot(
             )
         }
 
+        // The AI sometimes misreads the year on the receipt (2026 → 2025); move such dates back to the recent past.
+        val receiptDate = ReceiptDates.resolve(receipt.date)
+        if (receiptDate != receipt.date) {
+            println("Bot: AI read receipt date ${receipt.date}, using $receiptDate")
+        }
+
         val itemsSum = transactionItems.sumOf { it.amount.negate() }
         // The receipt row stores what was actually paid; fall back to the items sum if the total wasn't read.
         val total = toCents(receipt.total).takeIf { it.signum() > 0 } ?: itemsSum
@@ -320,7 +326,7 @@ class TelegramBot(
         val created = try {
             transactionService.createTransactionWithItems(
                 TransactionCreateDto(
-                    transactionDate = receipt.date,
+                    transactionDate = receiptDate,
                     amount = total.negate().toPlainString(),
                     // The receipt usually shows its currency, so the AI's reading is kept unless it isn't a valid code.
                     currency = receipt.currency.trim().uppercase().takeIf { it.matches(Regex("[A-Z]{3}")) } ?: defaultCurrency,
