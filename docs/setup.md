@@ -79,7 +79,7 @@ java -jar build\libs\finances-all.jar
 | `GEMINI_API_KEY` | — | Ключ Gemini API |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Модель Gemini |
 | `ANTHROPIC_API_KEY` | — | Ключ Claude API (при `AI_PROVIDER=claude`) |
-| `CLAUDE_MODEL` | `claude-opus-5-5` | Модель Claude |
+| `CLAUDE_MODEL` | `claude-haiku-5-5` | Модель Claude |
 | `OLLAMA_URL` | `http://localhost:11434` | Адрес Ollama (при `AI_PROVIDER=ollama`) |
 | `OLLAMA_MODEL` | `qwen3:14b` | Локальная модель для текстовых сообщений |
 | `OLLAMA_VISION_MODEL` | — | Локальная модель с картинками для фото чеков, например `qwen2.5vl:7b`. Без неё чеки идут в Gemini/Claude, если есть ключ |

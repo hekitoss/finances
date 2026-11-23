@@ -22,7 +22,7 @@ import java.util.Base64
 
 /** Claude API with JSON schema constrained output. Env: ANTHROPIC_API_KEY, CLAUDE_MODEL. */
 class ClaudeExpenseParser(
-    private val model: String = System.getenv("CLAUDE_MODEL") ?: "claude-opus-5-5",
+    private val model: String = System.getenv("CLAUDE_MODEL") ?: "claude-haiku-5-5",
     private val client: AnthropicClient = AnthropicOkHttpClient.fromEnv()
 ) : ExpenseParser {
     private val json = Json { ignoreUnknownKeys = true }

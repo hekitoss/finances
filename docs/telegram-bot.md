@@ -72,7 +72,7 @@ sequenceDiagram
 | | Gemini (по умолчанию) | Claude | Ollama (локально) |
 |---|---|---|---|
 | Класс | `GeminiExpenseParser` | `ClaudeExpenseParser` | `OllamaExpenseParser` |
-| Модель по умолчанию | `gemini-3.5-flash-lite` | `claude-opus-5-5` | `qwen3:14b` (текст); для чеков — `OLLAMA_VISION_MODEL` |
+| Модель по умолчанию | `gemini-3.5-flash-lite` | `claude-haiku-5-5` | `qwen3:14b` (текст); для чеков — `OLLAMA_VISION_MODEL` |
 | Как вызывается | HTTP к Gemini Interactions API | Официальный SDK `anthropic-java` | HTTP к `/api/chat`, JSON Schema в `format` |
 | Стоимость | Бесплатный тариф с лимитами | Оплата за токены; `claude-haiku-5-5` — около $0.15 за 1000 трат | Бесплатно, данные не уходят из дома |
 | Рассуждения модели | `thinking_level`: `minimal` для текста, `low` для чеков | `effort`: `LOW` для текста, `MEDIUM` для чеков | Выключены (`OLLAMA_THINK=true` включает) |
